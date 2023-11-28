@@ -1,0 +1,232 @@
+---
+title: "exo5 p13"
+output: pdf_document
+---
+
+
+1. Charger les donnees USArrests en tapant data(USArrests)
+
+```{r}
+data(USArrests)
+#data[]["Murder"]
+USArrests
+```
+2. Crer les donnees centres-reduites correspondantes en utilisant la fonction scale. Ces
+dernieres seront stockees dans la matrice d.
+```{r}
+d <- scale(USArrests, center = TRUE, scale = TRUE)
+```
+3.Afin de realiser une CAH utilisant le saut de Ward (method = "ward.D"), crer une matrice de distances (au carre) en tapant :
+para los singletons tenemos que la cardinalidad es de 1x1 sobre (cardA+CardB), por la formula de (cardA+CardB) saut de ward
+```{r}
+distances <- dist(d)
+help("dist")
+```
+
+4 Effectuer alors la CAH avec saut de Ward en utilisant la fonction hclust et representer le dendrogramme. Essayer aussi plot(h,hang=-1)
+```{r}
+h <- hclust(distances, method = "average")
+```
+
+
+5-Representer la distance entre classes agregees (“hauteur”) en fonction des regroupements. Expliquer pourquoi les partitions en 2 et 4 classes semblent interessantes.
+```{r}
+par(mfrow=c(1,2))
+plot(h,hang=-1)
+plot(h$height, type = "b")
+```
+
+6.En utilisant la fonction cutree, recuperer la partition en 2 classes en tapant :
+```{r}
+#récupérer la partition en 2 classes
+classe <- cutree(h,2)
+```
+
+7 Rajouter la variable classe a la matrix d. Les individus de la premiere classe peuvent etre
+recuperes en tapant classe1 <- subset(d,classe==1)
+```{r}
+#récupérer la classes 1
+classe1<- subset(d,classe==1)
+#récupérer la classes 2
+classe2<- subset(d,classe==2)
+head(classe1)
+```
+8.Calculer le cardinal et le centre de gravité 
+```{r}
+#de la classe1
+n1<- nrow(classe1[,1:4])
+#centre de gravité de la classe1
+cg1<-colMeans(classe1[,1:4])
+cg1
+cgtotal<-colMeans(USArrests)
+
+```
+le resultat peut etre interprété : 
+-murder,assault,rape : sont à peu près 1 ecart-type au-dessus de la moyenne ce qui fait qu'il ya plus de crime que la moyenne
+- UrbanPop: il est à peu près à la moyenne 
+
+homogénité d'une classe on peut l'avoir en calculant l'inertie(plus c faible plus c homogene) de la classe (plus les points sont loins du centre de gravité plus elle est moins homogène)
+
+calculer l'inertie pour savoir quelle classe est la plus dispersée
+```{r}
+nvar <- ncol(USArrests)
+inertie1 <- mean(rowSums(classe1[,1:4] - matrix(cg1,n1,nvar,byrow=T))^2)
+inertie1
+```
+
+9.Calculer  egalement le cardinal, le centre de gravite et l’inertie de la classe 2. Laquelle des deux classes est la plus dispersee?
+```{r}
+#calcul vcentre de gravité de la classe2
+n2<- nrow(classe2[,1:4])
+#centre de gravité de la classe2
+cg2<-colMeans(classe2[,1:4])
+cg2
+inertie2 <- mean(rowSums(classe2[,1:4] - matrix(cg2,n2,nvar,byrow=T))^2)
+inertie2
+```
+la classe la plus dispersée est la classe 2 car son inertie est plus grande.
+
+10. Interpreter les classes
+classe 1 :
+le resultat peut etre interprété : 
+-murder,assault,rape : sont à à peu près 1 ecart-type au-dessus de la moyenne ce qui fait qu'il ya plus de crime que la moyenne
+- UrbanPop: il est à peu près à la moyenne 
+classe 2: Moins de murder, ils sont les etats les moins dangereux
+
+2.Visualisation des resultats dans le premier plan factoriel
+a)Visualiser la classication dans le plan engendre par les deux premieres composantes prin- cipales des donnees centrees-reduites. Interpreter les composantes principales et la partition en deux classes retenue
+
+```{r}
+library(FactoMineR)
+res<- PCA(d)
+C<- res$ind$coord
+```
+
+
+Quelques tests
+```{r}
+cov<-cov(C)
+cov
+```
+Pour voir la corrélation entre les variable et les deux nouvelles variables
+On vois que les variables : Murder,Assault,Rape sont corrélée avec la var dim1
+On vois que les variables : UrbanPop est corrélée avec la var dim2
+```{r}
+cor(C[,1:2],d)
+```
+
+
+```{r}
+plot(C[,1:2],pch="")
+text(C[,1:2],label=rownames(USArrests),col=classe)
+```
+
+
+2.b)Repter toutes les etapes precedentes avec la partition en quatre classes
+
+```{r}
+#récupérer la partition en 4 classes
+newClasse <- cutree(h,4)
+#récupérer la classes 1
+newClasse1<- subset(d,newClasse==1)
+#récupérer la classes 2
+newClasse2<- subset(d,newClasse==2)
+#récupérer la classes 3
+newClasse3<- subset(d,newClasse==3)
+#récupérer la classes 4
+newClasse4<- subset(d,newClasse==4)
+head(newClasse)
+```
+
+Centre de gravité classe 3
+```{r}
+#calcul vcentre de gravité de la classe1
+n3_new<- nrow(newClasse3[,1:4])
+#centre de gravité de la classe1
+cg3_new<-colMeans(newClasse3[,1:4])
+cg3_new
+```
+inertie 3
+```{r}
+nvar <- ncol(USArrests)
+inertie3 <- mean(rowSums(newClasse3[,1:4] - matrix(cg3_new,n3_new,nvar,byrow=T))^2)
+inertie3
+```
+
+
+Centre de gravité classe 4
+```{r}
+#calcul vcentre de gravité de la classe1
+n4_new<- nrow(newClasse4[,1:4])
+#centre de gravité de la classe1
+cg4_new<-colMeans(newClasse4[,1:4])
+cg4_new
+```
+inertie 4
+```{r}
+nvar <- ncol(USArrests)
+inertie4 <- mean(rowSums(newClasse4[,1:4] - matrix(cg4_new,n4_new,nvar,byrow=T))^2)
+inertie4
+```
+
+```{r}
+plot(C[,1:2],pch="")
+text(C[,1:2],label=rownames(USArrests),col=newClasse)
+```
+
+
+3).Influence du lien
+
+Effectuez la CAH des donnees USArrests centrees-reduites en utilisant la distance Euclidienne et, successivement, le lien simple, le lien complet et le lien moyen. Comparez visuellement les trois dendrogrammes obtenus. Que pouvez-vous dire ?
+
+```{r}
+distances_euc <- dist(d)
+help("hclust")
+```
+
+
+dist : calcul la distance entre chaque point
+```{r}
+h <- hclust(distances_euc, method = "single")
+
+par(mfrow=c(1,2))
+plot(h,hang=-1)
+plot(h$height, type = "b")
+```
+
+```{r}
+h <- hclust(distances_euc, method = "complete")
+
+par(mfrow=c(1,2))
+plot(h,hang=-1)
+plot(h$height, type = "b")
+```
+
+```{r}
+h <- hclust(distances_euc, method = "average")
+
+par(mfrow=c(1,2))
+plot(h,hang=-1)
+plot(h$height, type = "b")
+```
+ on peut dire que le saut de ward prendre plus temps en faire un changement significative
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

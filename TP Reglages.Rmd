@@ -1,0 +1,24 @@
+---
+title: "TP Reglages"
+output: pdf_document
+date: '2022-11-08'
+---
+ #Question 1 De quelle classe est l’object Groceries? Il s’agit de la classe utilis ́ee pour repr ́esenter des donn ́ees de transactions.
+ Classe transactions
+ 
+```{r}
+#install.packages("arules")
+#install.packages("arulesViz")
+library(arules)
+library(arulesViz)
+data(Groceries)
+class(Groceries)
+```
+```{r}
+inspect(head(Groceries, 2))
+```
+```{r}
+rules <- apriori(Groceries,
+                       parameter = list(support = 0.01, confidence = 0.5))
+```
+

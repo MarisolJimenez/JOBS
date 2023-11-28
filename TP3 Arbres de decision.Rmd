@@ -1,0 +1,203 @@
+---
+title: "Arbres de decition"
+output: pdf_document
+date: '2022-11-08'
+---
+1 Commencez par installer un package supplementaire pour R, nomme rpart.plot, permettant de representer un arbre de decision avec de nombreuses informations utiles. Pour cela, utilisez la fonction install.packages(...). L’instruction install.packages("rpart.plot")
+devrait fonctionner depuis chez vous. Vous pouvez egalement utiliser l’interface de RStudio (il faut chercher un peu). Pour Verifier que la package est bien installe, tapez : library(rpart.plot)
+```{r}
+install.packages("rpart.plot")
+library(rpart.plot)
+```
+
+2._Nous allons travailler avec les donnees ptitanic disponibles dans le package rpart.plot. Chargez les donnees en tapant data(ptitanic), puis lisez l’aide associee afin de comprendre les donnees.
+```{r}
+#data(ptitanic)
+help(ptitanic)
+```
+
+3-Quel est le type de la variable survived. Resumez-la. Les donees contiennent-elles des valeurs manquantes ? Expliquez.
+
+D'après l'information du data on a que la variable survived est de type factor avec 2 classes : Died or survived. Il y a des valeurs manquantes par exemple en le 16eme valeur en age
+
+```{r}
+help(ptitanic)
+natitanic<-is.na(ptitanic)
+#valoresfaltantes<-subset(natitanic, pclass)
+```
+```{r}
+install.packages("naniar")
+library(naniar)
+
+vis_miss(ptitanic)
+```
+
+```{r}
+#install.packages("sqldf")
+#library(sqldf)
+sqldf("SELECT count( distinct survived) FROM ptitanic") 
+      #WHERE survived = 'survived' AND sex = 'female'")
+```
+
+4.-Afin d’estimer un arbre de decision permettant de predire la variable survived a partir de toutes les autres variables, il suffit de taper :
+```{r}
+#head(ptitanic)
+r <- rpart(survived~., data = ptitanic) #predecir survived en funcion del resto de columnas
+rpart.plot(r)
+```
+L’arbre de decision obtenu est binaire (chaque noeud interne a deux fils - il s’agit d’une caracteristique de la methode CART). Il peut etre represente en tapant rpart.plot(r). La classe majoritaire d’un noeud est donnee sur la premiere ligne de chaque rectangle de couleur. La proportion qui suit correspond a la proportion de survivants, en cada test cuanta porporción so-
+brevivió que cumple el test. Le pourcentage final correspond au pourcentage des exemples (lignes) satisfaisant tous les tests au-dessus du noeud considere. Par exemple, pour les exemples d’apprentissage satisfaisant tous les tests au-dessus de la feuille en-bas a droite :
+
+Cart transforma la variables numericas a calitativas; en el estado 0, cuantos pasajeros murieron en poroporcion? 0.38, despues a la derecha de las mujeres, en total: 466, cuantas sobrevivieron? 339, 330/466=0.73
+
+b.)Par exemple, pour les exemples d’apprentissage satisfaisant tous les tests au-dessus de la feuille en-bas a droite :
+
+```{r}
+ex <- subset(ptitanic, sex != "male" & pclass != "3rd") # exemples mujeres 1era clase 
+summary(ex$survived)
+sum(ex$survived == "survived") / nrow(ex) # proportion de ellas que sobrevivieron 
+nrow(ex) / nrow(ptitanic) # pourcentage relat.a tous les exemples
+```
+Entonces el primer renglon muestra la proporcion q cumple con las caracteristicas de esa hoja, respecto al nivel papa
+y el porcentaje, es los q cumplen esa hoja respecto a todos los datos
+
+Decrivez les passagers correspondants a la feuille consideree.
+Attention, les calculs precedents deviennent plus compliques lorsque les tests sous-jacents portent sur des variables contenant des valeurs manquantes.
+
+5.Supposons que l’on ait la description suivante d’un nouveau passager :
+        pclass    sex age sibsp parch
+           3rd female  19     3     0
+et que l’on souhaite predire si cette personne a survecu ou pas. La lecture de l’arbre associe cette description a la 4e feuille en partant de la gauche. La prediction est ainsi la non-survie (avec une probabilite de 86%, pues 0.14 representa la prop de supervivientes en ese estado). Cela peut etre automatise comme suit :
+```{r}
+np <- data.frame("3rd", "female", 19, 3, 0) # nouveau passager
+names(np) <- c("pclass", "sex", "age", "sibsp", "parch")
+predict(r, newdata = np) # probabilit ́es
+predict(r, newdata = np, type = "class") # classe majoritaire
+```
+5 Pour estimer l’erreur d’apprentissage de l’arbre, on peut predire la valeur de survived pour tous les exemples utilises pour l’apprentissage :
+```{r}
+pred.surv <- predict(r, newdata = ptitanic, type = "class")
+#et comparer le resultat a la realite
+mat.conf <- table(ptitanic$survived, pred.surv)
+View(mat.conf)
+erreur(mat.conf)
+```
+Le tableau de contingence obtenu s’appelle la matrice de confusion. Expliquez pourquoi. Verifiez que l’erreur d’apprentissage de l’arbre vaut 0.175 environ. Que cela signifie-t-il en pratique ?
+Concluimos que el modelos es mejor para predecir la muerte que para predecir la supervivencia 
+hay mas caso correctos y menos casos incorrectos dado died
+
+6.-Comme explique en cours, l’erreur d’apprentissage est une vision tres optimiste de l’erreur reelle car l’arbre est construit pour coller au mieux aux exemples d’apprentissage. Afin d’obtenir une estimation de la capacite de generalisation de l’arbre, on utilise souvent un sous-ensemble des donnees pour l’apprentissage et on estime l’erreur de l’arbre sur les donnees restantes, appelees ensemble test. Par exemple :
+```{r}
+n <- nrow(ptitanic)
+param.app <- 0.7 # proportion des exemples pour l’apprentissage
+set.seed(123) # on fixe la graine al ́eatoire
+permut.lignes <- sample(n) # on "m ́elange" les indices des lignes
+sel <- permut.lignes[1:(param.app * n)] # s ́election des lignes pour l’apprentissage
+app <- ptitanic[sel,] # ensemble d’apprentissage
+test <- ptitanic[-sel,] # ensemble de test
+nrow(app) + nrow(test) == nrow(ptitanic) # verification
+```
+Volvemos a ajustar un modelo pero ahora solo en los datos de entrenamiento
+
+```{r}
+r2 <- rpart(survived~., data = app) #modelo
+pred.surv2 <- predict(r2, newdata = test, type = "class") #Puis, l’erreur est calculee sur les donnees de test 
+#verificamos que se obtiene en los datos para testear
+
+#Donnez la matrice de confusion correspondante et v ́erifiez que l’erreur de l’arbre sur
+#l’ensemble test est de 0.20 environ
+mat.conf2 <- table(test$survived, pred.surv2)
+View(mat.conf2)
+erreur(mat.conf2)
+```
+
+
+```{r}
+#funcion para calcular el error
+erreur <- function(m)
+{s<- sum(m)
+(s-sum(diag(m)))/s
+}
+```
+7.L’algorithme d’apprentissage est contrˆole par plusieurs parametres. Parmi les plus im- portants pour la methode CART, on trouve minsplit et cp. Donnez le sens de minsplit en consultant ?rpart.control
+```{r}
+?rpart.control
+```
+minsplit = the minimum number of observations that must exist in a node in order for a split to be attempted.
+
+Le sens de cp est plus complexe a apprehender. On se contentera de retenir que plus cp est faible, plus l’arbre est profond. Par exemple :
+
+```{r}
+r3 <- rpart(survived~., data = ptitanic, minsplit = 0, cp = 0) 
+rpart.plot(r3)
+```
+
+La pratique de la modelisation par arbre de decision consiste a essayer de choisir les pa- rametres de l’algorithme d’apprentissage en recherchant un compromis entre une faible erreur sur l’ensemble test et un arbre facilement comprehensible, c’est-a-dire, peu profond. Par exemple, pour trouver une bonne valeur de cp a minsplit constant, on peut proceder de la façon suivante :
+```{r}
+minsplit <- 10 # on travaille `a minsplit constant
+mes.cp <- seq(0, 0.1, by = 0.001) # valeurs de cp `a essayer
+erreur.test <- numeric(length(mes.cp)) # les erreurs de test correspondantes 
+for (i in 1:length(mes.cp)) {
+r4 <- rpart(survived~., data = app, cp = mes.cp[i], minsplit = minsplit) 
+pred.surv4 <- predict(r4, newdata = test, type = "class")
+mat.conf4 <- table(test$survived, pred.surv4)
+erreur.test[i] <- erreur(mat.conf4) #  ́ecrire la fonction erreur(...)
+}
+plot(mes.cp, erreur.test, type = "l") # erreur de test en fonction de cp
+```
+Lorsque minsplit = 10, cp = 0.009 semble un choix pertinent. Expliquez pourquoi. 
+Es donde encontramos el minimo de error
+Cela suggere de considerer l’arbre suivant comme mod`ele :
+```{r}
+r5 <- rpart(survived~., data = ptitanic, cp = 0.009, minsplit = 10) 
+rpart.plot(r5)
+```
+8. Que peut-on reprocher a l’approche precedente relativement au choix de l’ensemble d’ap- prentissage et a l’ensemble test ?
+No hace un test para la variavle parch, number of parents children aboard??
+
+9. Installez le package mlbench, chargez le jeu de donnees Zoo
+```{r}
+#install.packages("mlbench")
+#library(mlbench)
+#data(Zoo)
+help(Zoo)
+head(Zoo)
+```
+et estimez un arbre de decision pour predire la variable type.
+```{r}
+#head(ptitanic)
+r <- rpart(type~., data = Zoo) #predecir survived en funcion del resto de columnas
+rpart.plot(r)
+```
+```{r}
+#vis_miss(Zoo) #0 na
+n <- nrow(Zoo)
+param.app <- 0.7 # proportion des exemples pour l’apprentissage
+set.seed(123) # on fixe la graine al ́eatoire
+permut.lignes <- sample(n) # on "m ́elange" les indices des lignes
+sel <- permut.lignes[1:(param.app * n)] # s ́election des lignes pour l’apprentissage
+app <- Zoo[sel,] # ensemble d’apprentissage
+test <- Zoo[-sel,] # ensemble de test
+nrow(app) + nrow(test) == nrow(Zoo) # verification
+```
+Volvemos a ajustar un modelo pero ahora solo en los datos de entrenamiento
+
+```{r}
+r2 <- rpart(type~., data = app) #modelo
+pred.surv2 <- predict(r2, newdata = test, type = "class") #Puis, l’erreur est calculee sur les donnees de test 
+#verificamos que se obtiene en los datos para testear
+
+#Donnez la matrice de confusion correspondante et v ́erifiez que l’erreur de l’arbre sur
+#l’ensemble test est de 0.20 environ
+mat.conf2 <- table(test$type, pred.surv2)
+View(mat.conf2)
+erreur(mat.conf2)
+```
+On adjute parametres de minsplit et cp
+```{r}
+#funcion para calcular el error
+r5 <- rpart(survived~., data = ptitanic, cp = 0.009, minsplit = 10) 
+rpart.plot(r5)
+
+```
+
