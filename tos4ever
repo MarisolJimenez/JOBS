@@ -1,120 +1,2462 @@
-def ecriture_ROC(methode,nombre_points,pointsy,temper):
+import sys # Chargement de la librairie système #sys.path.append("/scality/mmm00/data/TOS")
 
-    lst = list(pointsy.values())
+import openpyxl
 
-    testname='Test_' + CCT + methode
+import pandas as pd
 
-    if niveauKSI=='TM_SIMPLE':
+import numpy as np
 
-        roc_niveauKSI=str(niveauKSI) #pas titane ni nickel
+import math
 
-    elif niveauKSI=='1':
+import matplotlib.pyplot as plt
 
-        roc_niveauKSI='KSI_TOS='+str(int(niveauKSI))
+import scipy
 
-    else :
+import xlsxwriter
 
-        roc_niveauKSI='KSI_TOS='+str(float(niveauKSI))
+from openpyxl import load_workbook
+
+import seaborn as sns
+
+from scipy import stats
+
+#from scipy.optimize import minimize
+
+from scipy.linalg import lstsq
+
+from scipy import optimize
+
+from scipy.optimize import least_squares
+
+from ipywidgets import interact, fixed, interactive
+
+import ipywidgets as widgets
+
+path = "/scality/mmm00/data/TOS"
+
+data=z.input('Nom du fichier de résultats')
+
+nom_de_letude=z.input('Nom de l\'étude','')
+
+print("%angular <span ng-init=\"z.runParagraph('20230724-100431_629815145')\"></span>")
+
+
+
+
+models0 = pd.read_csv(path+'/Entrées/'+data+".csv", sep=';', decimal=',',encoding='Windows-1252')#tose_input_translationb,tose_input.csv basquin
+
+models0.drop(models0[models0['Rupture (oui/non)'] != 'oui'].index,inplace=True)
+
+if np.any(models0.columns=='Etat'):
+
+    par_etat='oui'
+
+    models0.rename(columns={'Etat': 'T (°C)'},inplace=True)
+
+else:
+
+    par_etat='non'
+
+temperatures1=models0['T (°C)'].unique()
+
+numberOfRows1=len(temperatures1)
+
+colsmc=['T','E','Af','alpha','Bf','beta','Seuil de deformation','n','n\'','Rref','Constante de translation','coeff_bk','somme des résidus','erreur','écart_type','lambda indivuduel B0,1']
+
+cols_basquin=['T','E','K','gamma','Seuil de deformation','n','n\'','Rref','Constante de translation','coeff_bk','somme des résidus','erreur','écart_type','lambda indivuduel B0,1']
+
+print('Votre fichier contient ',len(models0), 'essais avec rupture pour', numberOfRows1,'température(s) différente(s) à', temperatures1,'degrés')
+
+print(models0.head())
+
+
+
+
+if np.any(models0['Det/2 (%)'].isna()) or np.any(models0['Dep/2 (%)'].isna()):
+
+    choix_tose_tosp1 = z.select ('Choix du modèle', [('toseb','TOSe Basquin')])
+
+    print('Basquin est le seul modèle possible')
+
+elif np.any(models0['Dsstab/2'].isna()) or np.any(models0['smoy stab'].isna()):
+
+    choix_tose_tosp1 = z.select ('Choix du modèle', [('toseb','TOSe Basquin'),('tosemc','TOSe Manson-Coffin')])
+
+    print('TOSe est le seul modèle possible')
+
+else:    
+
+    choix_tose_tosp1 = z.select ('Choix des modèles possibles', [('tosp','TOSp Manson-Coffin'),('toseb','TOSe Basquin'),('tosemc','TOSe Manson-Coffin')])
 
    
 
-    lines1 = ['DEBUT_NOMMATE' , testname , 'FINDE_NOMMATE' , 'DEBUT_MULTIAX' , roc_niveauKSI , 'FINDE_MULTIAX' , 'DEBUT_FATIGUE']
+lambda_minimal = z.select ('Valeur pour Lambda B0,1 minimal', [(1.15,'1.15'),(1.3,'1.3')])    
 
-    if type_xl2roc!='r0':
+C=float(z.input('C',0.95))
 
-        lines2 = [1, temper, 40,nombre_points]
+P=float(z.input('P',0.99))
+
+if choix_tose_tosp1 == 'toseb':
+
+    choix_loi = 'basquin'
+
+else:
+
+    choix_loi = 'mc'
+
+if choix_tose_tosp1 == 'toseb' or choix_tose_tosp1 == 'tosemc':
+
+    choix_tose_tosp='tose'
+
+else:
+
+    choix_tose_tosp='tosp'
+
+ 
+
+R_imp =[]
+
+T_imp=[]
+
+j=-1
+
+for T in temperatures1:        
+
+    j+=1
+
+    choix_modeltype_imp  = z.select('Type de modélisation à ' +str(T)+'°C',[('TOS','Identification d’un modèle'),('merge_temps','Identification d’un modèle commun à une autre température'),('translation','Translation d’un modèle'),('enleve','Ne rien faire / écarter la température')])#,('graphes_direct','Tracer Wöhler et/ou Goodman graphes'),('ecrouissage','Tracer courbes d\'écrouissage')])
+
+    R_imp.append(choix_modeltype_imp)
+
+    T_imp.append(T)
+
+ 
+
+j=-1
+
+E_imp =[]
+
+for T in temperatures1:        
+
+    j+=1
+
+    if R_imp[j]=='enleve': #si on ecarte la temp on ne demande pas E
+
+        E_ind  = 0
 
     else:
 
-        lines2 = [1, temper, 21,nombre_points]
+        E_ind  = float(z.input ('Module d\'Young (E) à ' +str(T)+'°C',119937))
 
-    with open('/scality/mmm00/data/TOS/Sorties/Test'+methode+'.roc', 'w') as f:
+    E_imp.append(E_ind)
 
-        for line in lines1: #Début Fatigue, méthode et niveau statistique
+   
 
-            f.write(line)
+choix_modeltype1 = pd.DataFrame({"T (°C)" :T_imp, 'choix_modeltype' : R_imp,'E':E_imp})  
 
-            f.write('\n')
+ 
 
-        for line in lines2: #nombre de températures, de points calculée et niveaux de R
+if np.any(choix_modeltype1['choix_modeltype']=='merge_temps'): #s'il y a au moins une température à reagrouper
 
-            f.write('%d' % line)
+    choix_modeltype_merge=choix_modeltype1.copy()
 
-            f.write("\t")
+    merge=choix_modeltype1[choix_modeltype1['choix_modeltype']=='merge_temps']['T (°C)']
 
-        f.write('\n')    
+    #merge2=choix_modeltype1[choix_modeltype1['choix_modeltype']=='TOS']['T (°C)']
 
-        for line in temperatures_roc: #enliste des températures
+    merge2=[]
 
-            f.write('{:.8E}'.format(line))
+    for i in range(len(choix_modeltype1['T (°C)'])):
 
-            f.write("\t")
+        if choix_modeltype1['choix_modeltype'][i] =='TOS':
 
-        f.write('\n')    
+            merge2.append(str(choix_modeltype1['T (°C)'][i]))
 
-        for y in range(temper): #COURBES DE FATIGUE INFO
+   
 
-            for level in points_R:
+    choix_modeltype_merge=choix_modeltype1['T (°C)'].loc[choix_modeltype1['choix_modeltype']=='merge_temps'].unique()
 
-                if  type_xl2roc!='r0':
+    grouped=[]
 
-                    f.write('{:.8E}'.format(level))
+    T_grouped=[]
 
-                    f.write("\t")    
+ 
 
-                    if level==-0.8 or level==-.55 or level==-0.3 or level==-0.05 or level==-0.3 or level==0.45 or level==0.7 or level==0.95 or level==0.2:
+    for T in choix_modeltype_merge:  
 
-                        f.write('\n')
+        #groupe_to = z.input ('Parmi ces valeurs : '+str(merge2.values)+ ', écrivez celle qui regroupera la température à ' + str(T) +'°C', 0)
 
-                else: #en R0 on utilise que des niveaux Rpositive et R=-1
+        groupe_to = z.select("Courbe sélectionnée à "+str(T)+"°C :", list(zip(merge2,merge2)))
 
-                    if level >=0 or level==-1:
+        if par_etat=='non':
 
-                        f.write('{:.8E}'.format(level))
+            groupe_to=float(groupe_to)
 
-                        f.write("\t")
+           
 
-                        if level==0.15 or level==0.4 or level==0.65 or level==0.9 or level==0.95:
+        grouped.append(groupe_to)
 
-                            f.write('\n')
+        T_grouped.append(T)
 
-            #après avoir finir l'écriture des niveaux de R on écrit les points
+       
 
-            if  type_xl2roc!='r0':
+    choix_modeltype_grouped = pd.DataFrame({"T (°C)" :T_grouped, 'Groupe_to':grouped})    
 
-                for x in range(nb_R):   #pour chaque temp)
+    choix_modeltype1=pd.merge(choix_modeltype1, choix_modeltype_grouped, on='T (°C)', how='left')
 
-                    for z in range(nombre_points):
 
-                        f.write('{:.8E}'.format(lst[y][x][z]))
 
-                        f.write("\t")
 
-                        f.write('{:.8E}'.format(Nf_graphe2[z]))
+   if np.any(choix_modeltype1['choix_modeltype']=='translation'): #s'il y a des translations
 
-                        f.write("\t")
+    choix_modeltype_trans=choix_modeltype1.copy()
 
-                        f.write('{:.8E}'.format(5))
+    trans=choix_modeltype1[choix_modeltype1['choix_modeltype']=='translation']['T (°C)']
 
-                        f.write('\n')
+    trans2=choix_modeltype1[choix_modeltype1['choix_modeltype']=='TOS']['T (°C)']
 
-            else :
+    choix_modeltype_trans=choix_modeltype1['T (°C)'].loc[choix_modeltype1['choix_modeltype']=='translation'].unique()
 
-                for x in [0,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39]:#selection uniquement les indexes -1,0,0.95et R>=0
+    grouped=[]
 
-                    for z in range(nombre_points):
+    T_grouped=[]
 
-                        f.write('{:.8E}'.format(lst[y][x][z]))
+    #merge2=choix_modeltype1[choix_modeltype1['choix_modeltype']=='TOS']['T (°C)']
 
-                        f.write("\t")
+    merge2=[]
 
-                        f.write('{:.8E}'.format(Nf_graphe2[z]))
+    for i in range(len(choix_modeltype1['T (°C)'])):
 
-                        f.write("\t")
+        if choix_modeltype1['choix_modeltype'][i] =='TOS':
 
-                        f.write('{:.8E}'.format(5))
+            merge2.append(str(choix_modeltype1['T (°C)'][i]))
 
-                        f.write('\n')
+ 
 
-        f.write('FINDE_FATIGUE')  
+    for T in choix_modeltype_trans:  
 
+        #groupe_to2 = z.input ('Parmi ces valeurs : '+str(merge2.values)+ ', choisir une pour faire la translation de la température ' + str(T) +'°C', 0)
+
+        groupe_to2 = z.select("Courbe sélectionnée à "+str(T)+"°C :", list(zip(merge2,merge2)))
+
+        if par_etat=='non':
+
+            groupe_to2=float(groupe_to2)
+
+        grouped.append(groupe_to2)
+
+        T_grouped.append(T)
+
+       
+
+    choix_modeltype_trans = pd.DataFrame({"T (°C)" :T_grouped, 'Translation_de':grouped})  
+
+
+
+
+
+choix_modeltype_TOS=choix_modeltype1['T (°C)'].loc[choix_modeltype1['choix_modeltype']=='TOS'].unique()
+
+seuils =[]
+
+valeurs_n=[]
+
+valeurs_m=[]
+
+valeurs_R=[]
+
+T_TOS=[]
+
+j=-1
+
+valeurs_par=[]
+
+ 
+
+for T in choix_modeltype_TOS:        
+
+    j+=1
+
+    lesquels=''
+
+    seuil_ind  = z.input ('Seuil de déformation, εD (%) à ' +str(T)+'°C','') #Seuil de déformation, εD (%
+
+    if seuil_ind!='':
+
+        seuil_ind  = float(seuil_ind) #Seuil de déformation, εD (%)
+
+        lesquels='ep0'    
+
+    seuils.append(seuil_ind)
+
+ 
+
+    n_ind  = z.input ('n à ' +str(T)+'°C',0.5) #Seuil de déformation, εD (%)
+
+    if n_ind!='':
+
+        n_ind=float(n_ind)
+
+        if seuil_ind!='':
+
+            lesquels='ep0, n'
+
+        else:
+
+            lesquels='n'
+
+    else:
+
+        n_ind=z.input ('n à ' +str(T)+'°C','')
+
+    valeurs_n.append(n_ind)
+
+   
+
+    m_ind  = z.input ('n\' à ' +str(T)+'°C',0.75) #Seuil de déformation, εD (%)
+
+    if m_ind!='':
+
+        m_ind=float(m_ind)
+
+        if lesquels=='':
+
+            lesquels='m'
+
+        elif lesquels=='ep0':
+
+            lesquels='ep0, m'
+
+        elif lesquels=='ep0, n':
+
+            lesquels='ep0, n, m'
+
+        elif lesquels=='n':
+
+            lesquels='n, m'
+
+    else:
+
+        m_ind=z.input ('n\' à ' +str(T)+'°C','')
+
+    valeurs_m.append(m_ind)
+
+   
+
+    R_ind  = z.input ('R à ' +str(T)+'°C','') #Seuil de déformation, εD (%)
+
+    if R_ind!='':
+
+        R_ind=float(R_ind)
+
+        if lesquels=='':
+
+            lesquels='R'
+
+        elif lesquels=='ep0':
+
+            lesquels='R, ep0'
+
+        elif lesquels=='n, m':
+
+            lesquels='R, n, m'
+
+        elif lesquels=='n':
+
+            lesquels='R, n'
+
+        elif lesquels=='m':
+
+            lesquels='R,m'
+
+        elif lesquels=='ep0, m':
+
+            lesquels='R, ep0, m'
+
+        elif lesquels=='ep0, n':
+
+            lesquels='R, ep0, n'
+
+        elif lesquels=='ep0, n, m':
+
+            lesquels='tout fixé'
+
+       
+
+    valeurs_R.append(R_ind)
+
+    T_TOS.append(T)
+
+    valeurs_par.append(lesquels)
+
+   
+
+choix_modeltype_parametres = pd.DataFrame({"T (°C)" :T_TOS, 'n':valeurs_n,'m':valeurs_m,'seuil':seuils,'Rref':valeurs_R,'parametres_fixes':valeurs_par})
+
+choix_modeltype22=pd.merge(choix_modeltype1, choix_modeltype_parametres, on='T (°C)', how='left')
+
+ 
+
+if np.any(choix_modeltype1['choix_modeltype']=='translation'):
+
+    choix_modeltype=pd.merge(choix_modeltype22, choix_modeltype_trans, on='T (°C)', how='left')
+
+else :
+
+    choix_modeltype= choix_modeltype22
+
+ 
+
+##################LANCEZ LES MODELES
+
+models=pd.merge(models0, choix_modeltype, on='T (°C)', how='left') #on obtient les parametres et les temp à regrouper si c'est le cas
+
+models.drop(models[models['choix_modeltype'] == 'enleve'].index,inplace=True) #supprimer des températures dont on a pas besoin
+
+if np.any(choix_modeltype['choix_modeltype']=='merge_temps'): #s'il y a de temp à regrouper
+
+    models['T (°C)']=np.where(models['choix_modeltype']=='merge_temps',models['Groupe_to'],models['T (°C)'])
+
+ 
+
+choix_modeltype1.sort_values(by=['choix_modeltype'], inplace=True)
+
+#print(choix_modeltype1)
+
+temperatures=choix_modeltype1.drop(choix_modeltype1[choix_modeltype1['choix_modeltype'] == 'enleve'].index)
+
+temperatures=temperatures['T (°C)'].drop(temperatures[temperatures['choix_modeltype'] == 'merge_temps'].index).unique()
+
+numberOfRows=len(temperatures)
+
+ 
+
+if choix_loi == 'mc':
+
+    resultats0=pd.DataFrame(index=np.arange(0,numberOfRows),columns=colsmc)
+
+else :
+
+    resultats0=pd.DataFrame(index=np.arange(0,numberOfRows),columns=cols_basquin)
+
+df_lambda_modifiee = pd.DataFrame(columns=temperatures,index=['lambda_modifiée','lambda_original'])    
+
+sigmas_reelles= {}
+
+evaluations_fon_basquin = {}
+
+for x in range(numberOfRows):
+
+    translation=1
+
+    model=models[models['T (°C)']==temperatures[x]]    #lire les données, importation et creation des colonnées auxiliaires
+
+    if (np.any(model['choix_modeltype'].unique()=='TOS') or np.any(model['choix_modeltype'].unique()=='translation')) and (choix_loi == 'basquin'):
+
+        data_tose_id=model[["R","Dsstab/2","Nf","T (°C)"]]#tose_input_translationb,tose_input.csv
+
+        data_tose_id['log(Nf)'] = np.log10(data_tose_id['Nf'])
+
+        data_tose_id['log(Dsstab/2)'] = np.log10(data_tose_id['Dsstab/2'])
+
+        log_Nf=data_tose_id['log(Nf)']
+
+        sigma_experimental=data_tose_id['Dsstab/2']
+
+        Nf=data_tose_id['Nf']
+
+        R_experimental=data_tose_id['R']
+
+        E=model['E'].unique().mean()
+
+        zzz=str(data_tose_id['T (°C)'].unique()[0])
+
+        print(len(data_tose_id),'essais, loi  Basquin')
+
+       
+
+       
+
+        #plt.scatter(data_tose_id['Nf'],data_tose_id['Dsstab/2'])
+
+        #plt.show()
+
+    if (np.any(model['choix_modeltype'].unique()=='TOS') or np.any(model['choix_modeltype'].unique()=='translation')) and choix_loi == 'mc':
+
+        if choix_tose_tosp == 'tose':
+
+            data_tose_id_mc = model[["R","Det/2 (%)","Dep/2 (%)","Nf","T (°C)"]]#tose_input_mc.csv #tose_input_translationmc
+
+            print(len(data_tose_id_mc),'essais, loi TOSe MC')
+
+        if choix_tose_tosp == 'tosp':
+
+            data_tose_id_mc = model[["R","Det/2 (%)","Dep/2 (%)","Nf","Dsstab/2","smoy stab","T (°C)"]] #tosP_input_mc.csv
+
+            sigma_experimental=data_tose_id_mc['Dsstab/2']
+
+            sigma_moyenne = data_tose_id_mc['smoy stab']
+
+            rapport=(sigma_moyenne - sigma_experimental) / (sigma_moyenne + sigma_experimental)
+
+            print(len(data_tose_id_mc),'essais, loi TOSp MC')
+
+        data_tose_id_mc['log_Nf']=np.log10(data_tose_id_mc['Nf'])
+
+        data_tose_id_mc['log(Dep/2)']=np.where(data_tose_id_mc['Dep/2 (%)']==0,0,np.log10(data_tose_id_mc['Dep/2 (%)']/100))
+
+        log_Dep = data_tose_id_mc[data_tose_id_mc['log(Dep/2)'] != 0] #dataframe à utiliser seulement pour la regression plastique, on ignore les rows qui ne l'ont pas
+
+        log_Nf=np.log10(data_tose_id_mc['Nf'])
+
+        Nf=data_tose_id_mc['Nf']
+
+        R_experimental=data_tose_id_mc['R']
+
+        def_total_experimental = data_tose_id_mc['Det/2 (%)']/100
+
+        E=model['E'].unique().mean()
+
+        zzz=str(data_tose_id_mc['T (°C)'].unique()[0])
+
+        #print(data_tose_id_mc)
+
+           
+
+    print(zzz + '° degrés')
+
+   
+
+    #if choix_modeltype=='ecrouissage':
+
+     #   print("%angular <span ng-init=\"z.runParagraph('20230526-104840_883338477')\"></span>") #graphe d'ecrouissage
+
+       
+
+      #  print("%angular <span ng-init=\"z.runParagraph('20230516-153630_1891029972')\"></span>")
+
+     
+
+                                                                    #definir fonctions à optimiser log10(seff)-log10(sigma réelle)
+
+    if choix_loi == 'basquin' and np.any(model['choix_modeltype'].unique()=='TOS'):
+
+        def fon_sigma_calc(paramt):# <-- array in NumPy.
+
+           R,ep0,n,m = paramt # <-- Ordre des paramètres.
+
+           
+
+           fon_sigma_reelle_neg = np.log10(sigma_experimental *((2/(1-R_experimental))**n))
+
+           fon_sigma_reelle_pos = np.log10(sigma_experimental*((2/(1-R_experimental))**m)*(2**(n-m)))
+
+           sigma_reelle = np.where(data_tose_id['R']<=0,fon_sigma_reelle_neg,fon_sigma_reelle_pos)
+
+           
+
+        #regression
+
+           y_neg = np.log10((sigma_experimental*(2/(1-R_experimental))**n)-E*(ep0/100))
+
+           y_pos = np.log10(( sigma_experimental * ( 2 **(n-m)) * (2/(1-R_experimental))**m) -E*(ep0/100))
+
+           y = np.where(R_experimental<=0,y_neg,y_pos)
+
+           res = stats.linregress(log_Nf, y)
+
+        #obtenir K et gamma
+
+           K = 10**(res.intercept)
+
+           gamma = res.slope
+
+           
+
+           if R <= 0 :
+
+            #print('R<0')
+
+            a = np.log10(((K*Nf**gamma)+(E*(ep0/100)))*((2/(1-R))**n))
+
+           
+
+           else:  
+
+            #print('R>0')
+
+            a = np.log10(((K*Nf**gamma)+(E*(ep0/100)))*((2/(1-R))**m)*(2**(n-m)))
+
+           return a-sigma_reelle #sum((a-sigma_reelle)**2)
+
+       
+
+       
+
+   
+
+   
+
+                                             #Fonction à optimiser pour le cas Manson-Coffin
+
+    if (choix_loi == 'mc' and np.any(model['choix_modeltype'].unique()=='TOS')):
+
+        res_plas = stats.linregress(log_Dep['log_Nf'], log_Dep['log(Dep/2)'])
+
+        Af = 10**(res_plas.intercept)
+
+        alpha = res_plas.slope
+
+       
+
+        #The maximum valeurs à trouver sont 4 : R, ep0, n et m
+
+        def fon_sigma_calc_mc(paramt):
+
+           R,ep0,n,m = paramt # <-- Ordre des paramètres.
+
+           if choix_loi == 'mc' and choix_tose_tosp == 'tose':
+
+               fon_epsilon_reelle_neg = np.log10(E*def_total_experimental *((2/(1-R_experimental))**n))
+
+               fon_epsilon_reelle_pos = np.log10(E*def_total_experimental*((2/(1-R_experimental))**m)*(2**(n-m)))
+
+               sigma_reelle = np.where(data_tose_id_mc['R']<=0,fon_epsilon_reelle_neg,fon_epsilon_reelle_pos) #deuxième part de l'équation
+
+               
+
+               #obtenir Bf et beta par régression
+
+               data_tose_id_mc['Deformation_elastique']= data_tose_id_mc['Det/2 (%)']-data_tose_id_mc['Dep/2 (%)']-ep0
+
+               log_Defelastic = data_tose_id_mc.copy()
+
+               if (lesqueles=='ep0' or lesqueles=='ep0, n' or lesqueles=='ep0, m' or lesqueles=='ep0, n, m' or lesqueles=='R, ep0' or lesqueles=='R, ep0, m' or lesqueles=='R, ep0, n' or lesqueles=='tout fixé'):
+
+                   log_Defelastic = data_tose_id_mc[data_tose_id_mc['Deformation_elastique'] > 0] #dataframe à utiliser que dans les cas où on impose ep0
+
+               res_elas = stats.linregress(log_Defelastic['log_Nf'],  np.log10(log_Defelastic['Deformation_elastique']/100))
+
+               Bf = 10**(res_elas.intercept)
+
+               beta = res_elas.slope
+
+               if R <= 0 :
+
+                 
+
+                   a = np.log10(E*(Af*Nf**alpha+Bf*Nf**beta+ep0/100)*(2/(1-R))**n)
+
+               else:
+
+                    a = np.log10(E*((Af*Nf**alpha+Bf*Nf**beta)+(ep0/100))*((2/(1-R))**m)*(2**(n-m)))
+
+               
+
+           if choix_loi == 'mc' and choix_tose_tosp == 'tosp':
+
+               #Fonction à minimiser si on a TOSp MC
+
+               #rapport=(sigma_moyenne - sigma_experimental) / (sigma_moyenne + sigma_experimental)  
+
+               #deuxième part de l'équation
+
+               fon_epsilon_reelle_neg = np.log10(((E * def_total_experimental * sigma_experimental)**0.5) * (2 /(1-rapport))**n)
+
+               fon_epsilon_reelle_pos = np.log10(((E * def_total_experimental * sigma_experimental)**0.5) * (2 **(n - m)) * (2 / (1 - rapport))**m)
+
+               #en prenant en compte le rapport du chargement, fixé avant d'entrer à la fonction
+
+               sigma_reelle = np.where(rapport<=0,fon_epsilon_reelle_neg,fon_epsilon_reelle_pos)
+
+               
+
+                                                #obtenir Bf et beta par régression
+
+               #1er formule : #y=np.where(data_tose_id_mc['Det/2 (%)']-data_tose_id_mc['Dep/2 (%)']-ep0>=0,data_tose_id_mc['Det/2 (%)']-data_tose_id_mc['Dep/2 (%)']-ep0,0)
+
+               #res_elas = stats.linregress(log_Nf, np.where((y/100)>0,np.log10(y/100),0))
+
+               data_tose_id_mc['Deformation_elastique']= data_tose_id_mc['Det/2 (%)']-data_tose_id_mc['Dep/2 (%)']-ep0
+
+               log_Defelastic = data_tose_id_mc.copy()
+
+               if (lesqueles=='ep0' or lesqueles=='ep0, n' or lesqueles=='ep0, m' or lesqueles=='ep0, n, m' or lesqueles=='R, ep0' or lesqueles=='R, ep0, m' or lesqueles=='R, ep0, n' or lesqueles=='tout fixé'):
+
+                   log_Defelastic = data_tose_id_mc[data_tose_id_mc['Deformation_elastique'] > 0] #dataframe à utiliser seulement pour la regression elastique
+
+               res_elas = stats.linregress(log_Defelastic['log_Nf'],  np.log10(log_Defelastic['Deformation_elastique']/100))
+
+               Bf = 10**(res_elas.intercept)
+
+               beta = res_elas.slope
+
+               if R <= 0 :
+
+                 
+
+                   a = np.log10(E*(((Bf**2*Nf**(2*beta)+Af*Bf*Nf**(alpha+beta)) + ep0 / 100 * (2*Bf*Nf**(beta)+Af*Nf**(alpha) + ep0 / 100)) **0.5) * ((2 / (1 - R))**n))
+
+               else:  
+
+                   
+
+                    a = np.log10(E*(((Bf**2*Nf**(2*beta)+Af*Bf*Nf**(alpha+beta)) + ep0 / 100 * (2*Bf*Nf**(beta)+Af*Nf**(alpha) + ep0 / 100))**0.5) * (2**(n - m)) * ((2 / (1 - R)) **m))
+
+               #print('TOSp MC')
+
+           return a-sigma_reelle #Af,alpha,Bf,beta#sum((a-sigma_reelle)**2)
+
+       
+
+    #evaluar_func = fon_sigma_calc_mc([-0.57,0,0.39,0.87]) #Tosp MC #evaluar_func = fon_sigma_calc_mc([-0.09,0.01,0.18,0.5]) #Tose MC#evaluar_func
+
+   
+
+       
+
+    if np.any(model['parametres_fixes'].unique()=='') or np.any(model['choix_modeltype'].unique()=='translation'):
+
+        parametres_fixes='n'
+
+    else:
+
+        parametres_fixes='o'
+
+        lesqueles=model['parametres_fixes'].dropna().unique()
+
+       
+
+   
+
+                                                    #Trouver model par moindres carrés en cherchant à optimiser toutes les variables
+
+    if parametres_fixes =='n' and np.any(model['choix_modeltype'].unique()=='TOS'):
+
+        # R, ep0, n et m bornes
+
+        first_guess = np.array([0,0,0.5,0.5])#point de départ
+
+        bd= np.array([[-2,0,0,0],[1,0.8,1,1]])    #bornes
+
+       
+
+       
+
+        if np.any(model['choix_modeltype'].unique()=='TOS'):
+
+            if choix_tose_tosp == 'tose':
+
+                if choix_loi == 'basquin':
+
+                    res_squares = least_squares(fon_sigma_calc, x0=first_guess,  verbose=1, bounds=bd)
+
+                    print('Loi Basquin')
+
+                else:
+
+                    res_squares = least_squares(fon_sigma_calc_mc, x0=first_guess,  verbose=1, bounds=bd)
+
+                    print('Loi MC TOSe')
+
+            else:
+
+                res_squares = least_squares(fon_sigma_calc_mc, x0=first_guess,  verbose=1, bounds=bd) #ne change pas avec le point de départ, après de macro n=0.39,m=0.87,R=-0,57
+
+                print('Loi MC TOSp')
+
+                #res_squares
+
+                #print(res_squares.x,'R,ep0,n,n\'')
+
+            R=round(res_squares.x[0],4)
+
+            ep0=round(res_squares.x[1],4)
+
+            #ep0=res_squares.x[1]
+
+            n=round(res_squares.x[2],5)
+
+            m=round(res_squares.x[3],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+                                                    #Trouver model par moindres carrés en cherchant à optimiser maximum 3 variables
+
+    if parametres_fixes == 'o':
+
+        if lesqueles=='R':
+
+            Rref=model['Rref'].dropna().unique()[0]
+
+            def g(paramt):
+
+                ep0,n,m = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([Rref,ep0,n,m]) #nous reprenons la fonction définie précédemment en fixant certains de ses paramètres selon les cas
+
+                else:
+
+                    return fon_sigma_calc_mc([Rref,ep0,n,m])
+
+               
+
+            first_guess = np.array([0,0.5,0.5])
+
+            bd= np.array([[0,0,0],[0.6,1,1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            ep0=round(res_squares1.x[0],4)
+
+            n=round(res_squares1.x[1],5)
+
+            m=round(res_squares1.x[2],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeurs de εD (%), n et n\' optimisées')
+
+           
+
+       
+
+        if lesqueles=='ep0':
+
+            fix_ep0=model['seuil'].dropna().unique()[0]
+
+            ep0=fix_ep0
+
+            def g(paramt):
+
+                R,n,m = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,fix_ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,fix_ep0,n,m])
+
+                   
+
+            first_guess = np.array([-1,0.5,0.5])
+
+            bd= np.array([[-1,0,0],[1,1,1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            R=round(res_squares1.x[0],4)
+
+            n=round(res_squares1.x[1],5)
+
+            m=round(res_squares1.x[2],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(fix_ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeurs de R, n et n\' optimisées')
+
+           
+
+        if lesqueles=='n':
+
+            fix_n=model['n'].dropna().unique()
+
+            fix_n=fix_n[0]
+
+           
+
+            def g(paramt):
+
+                R,ep0,m = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,fix_n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,fix_n,m])
+
+                   
+
+            first_guess = np.array([-1,0,0.5])
+
+            bd= np.array([[-1,0,0],[1,0.6,1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            R=round(res_squares1.x[0],4)
+
+            ep0=round(res_squares1.x[1],5)
+
+            m=round(res_squares1.x[2],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(fix_n))
+
+            print('n\' = '+str(m))
+
+            print('Valeurs de R,εD (%), et n\' optimisées')
+
+           
+
+        if lesqueles=='m':
+
+            m=model['m'].dropna().unique()[0]
+
+            def g(paramt):
+
+                R,ep0,n = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([-1,0,0.4])
+
+            bd= np.array([[-1.1,0,0],[1,0.6,1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            R=round(res_squares1.x[0],4)
+
+            ep0=round(res_squares1.x[1],5)
+
+            n=round(res_squares1.x[2],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeurs de R, εD (%), et n optimisées')
+
+           
+
+        if lesqueles=='R, ep0':
+
+            R=model['Rref'].dropna().unique()[0]
+
+            ep0=model['seuil'].dropna().unique()[0]
+
+            def g(paramt):
+
+                n,m = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([0.6,0.4])
+
+            bd= np.array([[0,0],[1,1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            n=round(res_squares1.x[0],5)
+
+            m=round(res_squares1.x[1],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeurs de n et n\' optimisées')
+
+           
+
+           
+
+        if lesqueles=='R, n':
+
+            R=model['Rref'].dropna().unique()[0]
+
+            n=model['n'].dropna().unique()[0]
+
+            def g(paramt):
+
+                ep0,m = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([0,0.4])
+
+            bd= np.array([[0,0],[0.6,1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            ep0=round(res_squares1.x[0],5)
+
+            m=round(res_squares1.x[1],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeurs de εD (%) et n\' optimisées')
+
+           
+
+        if lesqueles=='R,m':
+
+            R=model['Rref'].dropna().unique()[0]
+
+            m=model['m'].dropna().unique()[0]
+
+            def g(paramt):
+
+                ep0,n = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([0,0.5])
+
+            bd= np.array([[0,0],[0.6,1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            ep0=round(res_squares1.x[0],5)
+
+            n=round(res_squares1.x[1],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeurs de εD (%), et n optimisées')
+
+           
+
+        if lesqueles=='ep0, n':
+
+            ep0=model['seuil'].dropna().unique()[0]
+
+            n=model['n'].dropna().unique()[0]
+
+            def g(paramt):
+
+                R,m = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([-1,0.5])
+
+            bd= np.array([[-1,0],[1,1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            R=round(res_squares1.x[0],5)
+
+            m=round(res_squares1.x[1],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeurs de R et n\' optimisées')
+
+           
+
+        if lesqueles=='ep0, m':
+
+            ep0=model['seuil'].dropna().unique()[0]
+
+            m=model['m'].dropna().unique()[0]
+
+           
+
+            def g(paramt):
+
+                R,n = paramt  #valeurs à optimiser
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([-1,0.2])
+
+            bd= np.array([[-1.1,0],[1,1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            R=round(res_squares1.x[0],5)
+
+            n=round(res_squares1.x[1],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeurs de R et n optimisées')
+
+           
+
+        if lesqueles=='n, m':
+
+            n=model['n'].dropna().unique()[0]
+
+            m=model['m'].dropna().unique()[0]
+
+           
+
+            def g(paramt):
+
+                R,ep0 = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([-1,0])
+
+            bd= np.array([[-1.1,0],[1,0.6]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            R=round(res_squares1.x[0],5)
+
+            ep0=round(res_squares1.x[1],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeurs de R et εD (%) optimisées')
+
+           
+
+        if lesqueles=='R, ep0, n':
+
+            R=model['Rref'].dropna().unique()[0]
+
+            ep0=model['seuil'].dropna().unique()[0]
+
+            n=model['n'].dropna().unique()[0]
+
+           
+
+            def g(paramt):
+
+                m = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([0.5])
+
+            bd= np.array([[0],[1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            m=round(res_squares1.x[0],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeur de n\' optimisée')
+
+           
+
+        if lesqueles=='R, ep0, m':
+
+            R=model['Rref'].dropna().unique()[0]
+
+            ep0=model['seuil'].dropna().unique()[0]
+
+            m=model['m'].dropna().unique()[0]
+
+           
+
+            def g(paramt):
+
+                n = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([0.5])
+
+            bd= np.array([[0],[1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            n=round(res_squares1.x[0],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeur de n optimisée')
+
+           
+
+        if lesqueles=='R, n, m':
+
+            R=model['Rref'].dropna().unique()[0]
+
+            n=model['n'].dropna().unique()[0]
+
+            m=model['m'].dropna().unique()[0]
+
+           
+
+            def g(paramt):
+
+                ep0 = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([0])
+
+            bd= np.array([[0],[0.6]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            ep0=round(res_squares1.x[0],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))  
+
+            print('Valeur de εD (%) optimisée')
+
+           
+
+        if lesqueles=='ep0, n, m':
+
+            n=model['n'].dropna().unique()[0]
+
+            ep0=model['seuil'].dropna().unique()[0]
+
+            m=model['m'].dropna().unique()[0]
+
+           
+
+            def g(paramt):
+
+                R = paramt
+
+                if choix_loi == 'basquin':
+
+                    return fon_sigma_calc([R,ep0,n,m])
+
+                else:
+
+                    return fon_sigma_calc_mc([R,ep0,n,m])
+
+                   
+
+            first_guess = np.array([-1])
+
+            bd= np.array([[-1.1],[1]])
+
+            res_squares1 = least_squares(g, x0=first_guess,  verbose=1, bounds=bd)
+
+            R=round(res_squares1.x[0],5)
+
+            print('R = ' + str(R))
+
+            print('Seuil de déformation, εD (%) = '+ str(ep0))
+
+            print('n = '+ str(n))
+
+            print('n\' = '+str(m))
+
+            print('Valeur de R optimisée')
+
+     
+
+       
+
+                                                                                 
+
+    if np.any(model['choix_modeltype'].unique()=='TOS'):
+
+                                                         #fonction de coefficients, à utiliser qu'aprés une identification, pas pour le cas de translation
+
+        if choix_loi == 'basquin':
+
+            def fon_coeff(paramt):
+
+                R,ep0,n,m = paramt
+
+                fon_sigma_reelle_neg = np.log10(sigma_experimental *((2/(1-R_experimental))**n))
+
+                fon_sigma_reelle_pos = np.log10(sigma_experimental*((2/(1-R_experimental))**m)*(2**(n-m)))
+
+                sigma_reelle = np.where(data_tose_id['R']<=0,fon_sigma_reelle_neg,fon_sigma_reelle_pos)
+
+                #regression
+
+                y_neg = np.log10((sigma_experimental*(2/(1-R_experimental))**n)-E*(ep0/100))
+
+                y_pos = np.log10(( sigma_experimental * ( 2 **(n-m)) * (2/(1-R_experimental))**m) -E*(ep0/100))
+
+                y = np.where(R_experimental<=0,y_neg,y_pos)
+
+                res = stats.linregress(log_Nf, y)
+
+                #obtenir K et gamma
+
+                K = 10**(res.intercept)
+
+                gamma = res.slope
+
+                return K,gamma,sigma_reelle,y
+
+               
+
+        if choix_loi == 'mc':
+
+            res_plas = stats.linregress(log_Dep['log_Nf'], log_Dep['log(Dep/2)'])
+
+            Af = 10**(res_plas.intercept)
+
+            alpha = res_plas.slope
+
+       
+
+            if choix_tose_tosp == 'tose':
+
+                def fon_coeff(paramt):
+
+                    R,ep0,n,m = paramt
+
+                    fon_epsilon_reelle_neg = np.log10(E*def_total_experimental *((2/(1-R_experimental))**n))
+
+                    fon_epsilon_reelle_pos = np.log10(E*def_total_experimental*((2/(1-R_experimental))**m)*(2**(n-m)))
+
+                    sigma_reelle = np.where(data_tose_id_mc['R']<=0,fon_epsilon_reelle_neg,fon_epsilon_reelle_pos) #deuxième part de l'équation
+
+                   
+
+                    #obtenir Bf et beta par régression
+
+                    data_tose_id_mc['Deformation_elastique']= data_tose_id_mc['Det/2 (%)']-data_tose_id_mc['Dep/2 (%)']-ep0
+
+                    log_Defelastic = data_tose_id_mc.copy()
+
+                    if (lesqueles=='ep0' or lesqueles=='ep0, n' or lesqueles=='ep0, m' or lesqueles=='ep0, n, m' or lesqueles=='R, ep0' or lesqueles=='R, ep0, m' or lesqueles=='R, ep0, n' or lesqueles=='tout fixé'):
+
+                        log_Defelastic = data_tose_id_mc[data_tose_id_mc['Deformation_elastique'] > 0]
+
+                    #dataframe à utiliser seulement pour la regression elastique, on ignore les rows qui ne l'ont pas
+
+                    res_elas = stats.linregress(log_Defelastic['log_Nf'],  np.log10(log_Defelastic['Deformation_elastique']/100))
+
+                    #res_elas = stats.linregress(log_Nf, np.log10( (data_tose_id_mc['Det/2 (%)']-data_tose_id_mc['Dep/2 (%)']-ep0)/100 ))
+
+                    Bf = 10**(res_elas.intercept)
+
+                    beta = res_elas.slope
+
+                    return Bf,beta,sigma_reelle
+
+               
+
+            if choix_tose_tosp == 'tosp':
+
+                def fon_coeff(paramt):
+
+                    fon_epsilon_reelle_neg = np.log10(((E * def_total_experimental * sigma_experimental)**0.5) * (2 /(1-rapport))**n)
+
+                    fon_epsilon_reelle_pos = np.log10(((E * def_total_experimental * sigma_experimental)**0.5) * (2 **(n - m)) * (2 / (1 - rapport))**m)
+
+                    sigma_reelle = np.where(rapport<=0,fon_epsilon_reelle_neg,fon_epsilon_reelle_pos) #issue d'essais
+
+                    #obtenir Bf et beta par régression
+
+                    data_tose_id_mc['Deformation_elastique']= data_tose_id_mc['Det/2 (%)']-data_tose_id_mc['Dep/2 (%)']-ep0
+
+                    log_Defelastic = data_tose_id_mc.copy()
+
+                    if (lesqueles=='ep0' or lesqueles=='ep0, n' or lesqueles=='ep0, m' or lesqueles=='ep0, n, m' or lesqueles=='R, ep0' or lesqueles=='R, ep0, m' or lesqueles=='R, ep0, n' or lesqueles=='tout fixé'):
+
+                        log_Defelastic = data_tose_id_mc[data_tose_id_mc['Deformation_elastique'] > 0] #pou appliquer log sans problème
+
+                    res_elas = stats.linregress(log_Defelastic['log_Nf'],np.log10(log_Defelastic['Deformation_elastique']/100))
+
+                    #y=np.where(data_tose_id_mc['Det/2 (%)']-data_tose_id_mc['Dep/2 (%)']-(ep0/100)>=0,data_tose_id_mc['Det/2 (%)']-data_tose_id_mc['Dep/2 (%)']-(ep0/100),0)
+
+                    #res_elas = stats.linregress(log_Nf, np.where(y>0,np.log10(y),0))
+
+                    Bf = 10**(res_elas.intercept)
+
+                    beta = res_elas.slope    #print('TOSp MC')
+
+                    return Bf,beta,sigma_reelle
+
+           
+
+       
+
+        print('Coefficients')
+
+        coeff = fon_coeff([R,ep0,n,m])
+
+        sigma_reelle=coeff[2] #à utiliser après, sur la section de graphes
+
+        if choix_loi == 'mc':
+
+            Bf=coeff[0]
+
+            beta=coeff[1]
+
+            print('Af = '+str(round(Af,4)))
+
+            print('alpha = '+str(round(alpha,4)))
+
+            print('Bf = '+str(round(Bf,4)))
+
+            print('beta = ' + str(round(beta,4)))
+
+        else:
+
+            K=coeff[0]
+
+            gamma=coeff[1]
+
+            print('K = '+str(round(K,4)))
+
+            print('gamma = '+str(round(gamma,4)))
+
+       
+
+                                                # CODE FOR TRANSLATION
+
+    if np.any(model['choix_modeltype'].unique()=='translation'):
+
+        #obtenir les coefficients, et valeurs de n,m,R et ep0 à partir d'une autre température dont le modèle a déjà été identifié
+
+        if choix_loi == 'basquin' and choix_tose_tosp == 'tose':
+
+            K=resultats0['K'].loc[resultats0['T'] == groupe_to2].iloc[0]
+
+            gamma=resultats0['gamma'].loc[resultats0['T'] == groupe_to2].iloc[0]
+
+            n=resultats0['n'].loc[resultats0['T'] == groupe_to2].iloc[0]
+
+            m=resultats0['n\''].loc[resultats0['T'] == groupe_to2].iloc[0]
+
+            Rref=resultats0['Rref'].loc[resultats0['T'] == groupe_to2].iloc[0]
+
+            R=Rref
+
+            ep0=resultats0['Seuil de deformation'].loc[resultats0['T'] == groupe_to2].iloc[0]
+
+           
+
+            fon_sigma_reelle_neg = np.log10(sigma_experimental *((2/(1-R_experimental))**n))
+
+            fon_sigma_reelle_pos =np.log10(sigma_experimental*((2/(1-R_experimental))**m)*(2**(n-m)))
+
+            sigma_reelle = np.where(data_tose_id['R']<=0,fon_sigma_reelle_neg,fon_sigma_reelle_pos)
+
+           
+
+            def fon_translation(paramt):
+
+               trans = paramt
+
+               if Rref <= 0 :
+
+                a = np.log10(((trans*K*Nf**gamma)+(E*((trans*ep0)/100)))*((2/(1-Rref))**n))
+
+               
+
+               else:  
+
+                a = np.log10(((trans*K*Nf**gamma)+(E*((trans*ep0)/100)))*((2/(1-Rref))**m)*(2**(n-m)))
+
+               return a-sigma_reelle#sum((a-sigma_reelle)**2) #a-sigma_reelle
+
+           
+
+        if choix_loi == 'mc' and choix_tose_tosp == 'tose':
+
+            #obtenir les coefficients, et valeurs de n,m,R et ep0 à partir d'une autre température dont le modèle a déjà été identifié
+
+            Af=resultats0['Af'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            #print('Af de temp a trasladar',Af)
+
+            alpha=resultats0['alpha'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            Bf=resultats0['Bf'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            beta=resultats0['beta'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            n=resultats0['n'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            m=resultats0['n\''].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            Rref=resultats0['Rref'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            R=Rref
+
+            ep0=resultats0['Seuil de deformation'].loc[resultats0['T'] == str(groupe_to2)].values
+
+            #print('valores copiados',alpha,Bf,beta,n,m,R,ep0)
+
+           
+
+            fon_epsilon_reelle_neg = np.log10(E*def_total_experimental *((2/(1-R_experimental))**n))
+
+            fon_epsilon_reelle_pos = np.log10(E*def_total_experimental*((2/(1-R_experimental))**m)*(2**(n-m)))
+
+            sigma_reelle = np.where(data_tose_id_mc['R']<=0,fon_epsilon_reelle_neg,fon_epsilon_reelle_pos) #deuxième part de l'équation
+
+            print('tose mc')
+
+            def fon_translation(paramt):
+
+               trans = paramt
+
+               if Rref <= 0 :
+
+                a = np.log10(E*(trans*Af*Nf**alpha+trans*Bf*Nf**beta+(trans*ep0)/100)*(2/(1-Rref))**n)
+
+               else:  
+
+                a = np.log10(E*((trans*Af*Nf**alpha+trans*Bf*Nf**beta)+((trans*ep0)/100))*((2/(1-Rref))**m)*(2**(n-m)))
+
+               return a-sigma_reelle#a-sigma_reelle #sum((a-sigma_reelle)**2)
+
+               
+
+        if choix_loi == 'mc' and choix_tose_tosp == 'tosp':
+
+           #obtenir les coefficients, et valeurs de n,m,R et ep0 à partir d'une autre température dont le modèle a déjà été identifié
+
+            Af=resultats0['Af'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            alpha=resultats0['alpha'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            Bf=resultats0['Bf'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            beta=resultats0['beta'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            n=resultats0['n'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            m=resultats0['n\''].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            Rref=resultats0['Rref'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+            R=Rref
+
+            ep0=resultats0['Seuil de deformation'].loc[resultats0['T'] == str(groupe_to2)].iloc[0]
+
+           
+
+            fon_epsilon_reelle_neg = np.log10(((E * def_total_experimental * sigma_experimental)**0.5) * (2 /(1-rapport))**n)
+
+            fon_epsilon_reelle_pos = np.log10(((E * def_total_experimental * sigma_experimental)**0.5) * (2 **(n - m)) * (2 / (1 - rapport))**m)
+
+            sigma_reelle = np.where(rapport<=0,fon_epsilon_reelle_neg,fon_epsilon_reelle_pos)
+
+            def fon_translation(paramt):
+
+                trans = paramt
+
+                if Rref <= 0 :
+
+                    a = np.log10(E*(((trans*Bf**2*Nf**(2*beta)+trans*Af*Bf*Nf**(alpha+beta)) + (trans*ep0)/ 100 * (2*trans*Bf*Nf**(beta)+trans*Af*Nf**(alpha) + (trans*ep0) / 100)) **0.5) * ((2 / (1 - Rref))**n))
+
+                else:
+
+                    a = np.log10(E*(((trans*Bf**2*Nf**(2*beta)+trans*Af*Bf*Nf**(alpha+beta)) + (trans*ep0) / 100 * (2*trans*Bf*Nf**(beta)+trans*Af*Nf**(alpha) + (trans*ep0) / 100))**0.5) * (2**(n - m)) * ((2 / (1 - Rref)) **m))
+
+                return a-sigma_reelle #sum((a-sigma_reelle)**2)
+
+           
+
+           
+
+        #evaluar_func = fon_translation(1.17) #print(evaluar_func,'fonction evaluée')
+
+       
+
+        def fon_opt_trans(paramt):
+
+            trans=paramt
+
+            return sum((fon_translation(trans))**2)
+
+           
+
+        #Minimisation du constante de translation
+
+           
+
+        # comme on doit optimiser une fonction univariable on peut choisir une méthode plus simple, pas besoin ni de points initials ni des bordes. Fonction à minimiser sum((a-sigma_reelle)**2)
+
+        result = optimize.minimize_scalar(fon_opt_trans)
+
+        translation=round(result.x,2)
+
+       
+
+        print('Constante de translation = ' + str(translation))
+
+        #result
+
+       
+
+        print('Nouveaux coefficients') #pas besoin de fonction, simplement translation des coeff données comme entrée
+
+       
+
+        if choix_loi == 'mc':
+
+            #Bf_new=Bf*translation
+
+            #Af_new=Af*translation
+
+            Bf=Bf*translation
+
+            Af=Af*translation
+
+            ep0=ep0*translation
+
+            print('Af = '+str(round(Af,4)))
+
+            print('Bf = '+str(round(Bf,4)))
+
+           
+
+        else:
+
+            print(K,'avant translation, K du modèle original')
+
+            K=K*translation
+
+            ep0=ep0*translation
+
+            coeff=fon_coeff([R,ep0,n,m]) #on evaluate la fonction seulement pour obtenir coeff[3] variable nécessaire pour le calcul de bk
+
+            print('K = '+str(round(K,4)))    
+
+   
+
+    #evaluar_func_bas (variable qui contient les erreurs du model), sigma model-sigmacalculee.
+
+    if np.any(model['choix_modeltype'].unique()=='TOS'):#on obtient ces valeurs avec une fonction different selon si s'agit de TOS ou d'une translation
+
+        if choix_loi == 'basquin':
+
+            evaluar_func_bas = fon_sigma_calc([R,ep0,n,m]) #ces paramètres sont obtenues après un modèle TOS ou directement dans le cas d'une translation
+
+        else:
+
+            evaluar_func_bas = fon_sigma_calc_mc([R,ep0,n,m]) #on obtient leserreurs dans une array
+
+   
+
+    if np.any(model['choix_modeltype'].unique()=='translation'):
+
+        evaluar_func_bas = fon_translation(translation) # Ces valeurs sont obtenues directement dans le cas d'une translation
+
+           
+
+   
+
+    ecart_type = np.std(evaluar_func_bas)
+
+    #inverse_normal=-scipy.stats.norm.ppf(0.01, 0, scale=ecart_type)
+
+    lambda_calculee_mini=10**(3*ecart_type)
+
+   
+
+    #Par rapport au niveau statistique Bk
+
+    if choix_loi == 'mc':
+
+        model['rompus']=model['Det/2 (%)']-model['Dep/2 (%)']-ep0>0
+
+    else:
+
+        model['rompus']=coeff[3]>0
+
+    #print(model['rompus'].values.sum())
+
+    bk=(scipy.stats.norm.ppf(P)+scipy.stats.norm.ppf(C)*(1/model['rompus'].values.sum()*(1-(scipy.stats.norm.ppf(C)**2)/2/(model['rompus'].values.sum()-1))+(scipy.stats.norm.ppf(P)**2)/2/(model['rompus'].values.sum()-1))**0.5)/(1-(scipy.stats.norm.ppf(C)**2)/2/(model['rompus'].values.sum()-1))
+
+   
+
+    bk=max(bk,3)
+
+   
+
+   
+
+    if lambda_calculee_mini<lambda_minimal:
+
+       # df_lambda_modifiee[temperatures[x]]['lambda_modifiée']=True
+
+        #df_lambda_modifiee[temperatures[x]]['lambda_original']=lambda_calculee_mini
+
+        lambda_calculee_mini=lambda_minimal
+
+    else:
+
+        #df_lambda_modifiee[temperatures[x]]['lambda_modifiée']='non'
+
+        df_lambda_modifiee[temperatures[x]]['lambda_original']=lambda_calculee_mini
+
+   
+
+    lambda_calculee_mini=round(lambda_calculee_mini,3)
+
+    if choix_loi == 'mc': #        if np.any(model['choix_modeltype'].unique()=='TOS'):
+
+        model_info=[zzz,E,round(Af,3),round(alpha,3),round(Bf,3),round(beta,3),round(ep0,3),round(n,3),round(m,3),round(R,4),translation,bk,sum(evaluar_func_bas),sum(evaluar_func_bas**2),ecart_type,round(lambda_calculee_mini,3)]
+
+        #else:             model_info=[zzz,E,round(Af[0],3),round(alpha[0],3),round(Bf[0],3),round(beta[0],3),round(ep0[0],3),round(n[0],3),round(m[0],3),round(R[0],4),round(lambda_calculee_mini,3)]
+
+    else:
+
+        #if np.any(model['choix_modeltype'].unique()=='TOS'):
+
+        model_info=[zzz,E,round(K,3),round(gamma,3),np.round(ep0,3),np.round(n,3),np.round(m,3),np.round(R,4),translation,bk,sum(evaluar_func_bas),sum(evaluar_func_bas**2),ecart_type,round(lambda_calculee_mini,3)]
+
+        #else:             model_info=[zzz,E,round(K[0],3),round(gamma[0],3),round(ep0[0],3),round(n[0],3),round(m[0],3),round(R[0],4),round(lambda_calculee_mini,3)]
+
+   
+
+   
+
+    resultats0.loc[x] = model_info
+
+    #resultats0=resultats0.apply(pd.to_numeric)
+
+    sigmas_reelles[x] = sigma_reelle
+
+    evaluations_fon_basquin[x]= evaluar_func_bas #se obtiene en cada for
+
+ 
+
+resultats_finals['Lambda individuel Bk']= 10**(resultats_finals['coeff_bk']*np.log10(resultats_finals['lambda B0,1 retenu'])/3)
+
+resultats_export2.to_csv(path_or_buf=path+'/Sorties/Identif_'+nom_de_letude+".csv",header=True,index=False,sep=';', decimal= ",")
+
+
+
+
+
+
+
+#################################################              GRAPHES
+
+Nf_graph=np.arange(64)
+
+for i in  range(2, 9):
+
+    for j in  range(1, 11):
+
+        Nf_graph[j-1+(i-2)*9]=j*10**i
+
+ 
+
+resultats=resultats_finals
+
+#temperatures=models['T (°C)'].unique()
+
+lambda_specifie=1.5
+
+choix_modeltype1212='notos'
+
+if choix_modeltype1212=='graphes_direct':
+
+    coeff_models = pd.read_csv(path+'/'+data_coeff+".csv", sep=';', decimal=',',encoding='Windows-1252')#tose_input_translationb,tose_input.csv basquin
+
+    temperatures=coeff_models['T'].unique()
+
+    numberOfRows=len(temperatures)
+
+   
+
+    resultats=coeff_models.apply(pd.to_numeric) #garder en format numerique cette information
+
+   
+
+    if (choix_loi == 'basquin'): #definir fonction pour obtenir sigma-reelle, coeff l'info experimental comme parametres
+
+        def fon_coeff_graph(paramt):
+
+            R,ep0,n,m,R_experimental,sigma_experimental = paramt # <-- Ordre des paramètres.
+
+            fon_sigma_reelle_neg = np.log10(sigma_experimental *((2/(1-R_experimental))**n))
+
+            fon_sigma_reelle_pos = np.log10(sigma_experimental*((2/(1-R_experimental))**m)*(2**(n-m)))
+
+            sigma_reelle = np.where(data_tose_id['R']<=0,fon_sigma_reelle_neg,fon_sigma_reelle_pos)
+
+            return sigma_reelle
+
+               
+
+    if choix_loi == 'mc'and choix_tose_tosp == 'tose':
+
+        def fon_coeff_graph(paramt):
+
+            R,ep0,n,m,R_experimental,def_total_experimental = paramt # <-- Ordre des paramètres.
+
+            fon_epsilon_reelle_neg = np.log10(E*def_total_experimental *((2/(1-R_experimental))**n))
+
+            fon_epsilon_reelle_pos = np.log10(E*def_total_experimental*((2/(1-R_experimental))**m)*(2**(n-m)))
+
+            sigma_reelle = np.where(R_experimental<=0,fon_epsilon_reelle_neg,fon_epsilon_reelle_pos) #deuxième part de l'équation
+
+            return sigma_reelle
+
+               
+
+    if choix_loi == 'mc' and choix_tose_tosp == 'tosp':
+
+        def fon_coeff_graph(paramt):
+
+            R,ep0,n,m,rapport,sigma_experimental,def_total_experimental = paramt
+
+            fon_epsilon_reelle_neg = np.log10(((E * def_total_experimental * sigma_experimental)**0.5) * (2 /(1-rapport))**n)
+
+            fon_epsilon_reelle_pos = np.log10(((E * def_total_experimental * sigma_experimental)**0.5) * (2 **(n - m)) * (2 / (1 - rapport))**m)
+
+            sigma_reelle = np.where(rapport<=0,fon_epsilon_reelle_neg,fon_epsilon_reelle_pos)
+
+            return sigma_reelle
+
+   
+
+    for x in range(numberOfRows): #evaluation de cette fonction en tenant en compte les différents coefficients de chaque température
+
+        model=models[models['T (°C)']==temperatures[x]]
+
+        if (choix_loi == 'basquin'):
+
+            sigma_reelle=fon_coeff_graph([resultats['Rref'].loc[x],resultats['Seuil de deformation'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x],model['R'],model['Dsstab/2']])
+
+        if choix_loi == 'mc'and choix_tose_tosp == 'tose':    
+
+            sigma_reelle=fon_coeff_graph([resultats['Rref'].loc[x],resultats['Seuil de deformation'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x],model['R'],model['Det/2 (%)']/100])
+
+        if choix_loi == 'mc' and choix_tose_tosp == 'tosp':
+
+            sigma_experimental=model['Dsstab/2']
+
+            sigma_moyenne = model['smoy stab']
+
+            rapport=(sigma_moyenne - sigma_experimental) / (sigma_moyenne + sigma_experimental)
+
+            sigma_reelle=fon_coeff_graph([resultats['Rref'].loc[x],resultats['Seuil de deformation'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x],rapport,model['Dsstab/2'],model['Det/2 (%)']/100])
+
+           
+
+        sigmas_reelles[x] = sigma_reelle #dictionaire de sigma reel pour chaque temp  
+
+   
+
+for x in range(numberOfRows):#range(len(models['T (°C)'].unique())): #pour chaque température
+
+    #info_model=resultats[]
+
+    if choix_loi == 'basquin' and choix_tose_tosp == 'tose':
+
+        K=resultats['K'].loc[x]
+
+        Rref=resultats['Rref'].loc[x]
+
+        model=models[models['T (°C)']==temperatures[x]]
+
+        Nf=model[["Nf"]]#tose_input_translationb,tose_input.csv
+
+        ep0=resultats['Seuil de deformation'].loc[x]
+
+        gamma = resultats['gamma'].loc[x]
+
+        n=resultats['n'].loc[x]
+
+        m=resultats['n\''].loc[x]
+
+        def fon_graphes(paramt):
+
+           Rref,Nf = paramt
+
+           if Rref <= 0 :
+
+            a = ((K*Nf**gamma)+(E*(ep0/100)))*((2/(1-Rref))**n)
+
+           
+
+           else:  
+
+            a = ((K*Nf**gamma)+(E*(ep0/100)))*((2/(1-Rref))**m)*(2**(n-m))
+
+           return a
+
+           
+
+    if choix_loi == 'mc' and choix_tose_tosp == 'tose':
+
+        Af=resultats['Af'].loc[x]
+
+        Bf=resultats['Bf'].loc[x]
+
+        Rref=resultats['Rref'].loc[x]
+
+        model=models[models['T (°C)']==temperatures[x]]
+
+        Nf=model[["Nf"]]#tose_input_translationb,tose_input.csv
+
+        ep0=resultats['Seuil de deformation'].loc[x]
+
+        alpha = resultats['alpha'].loc[x]
+
+        beta=resultats['beta'].loc[x]
+
+        n=resultats['n'].loc[x]
+
+        m=resultats['n\''].loc[x]
+
+        def fon_graphes(paramt):
+
+            Rref,Nf = paramt
+
+            if Rref <= 0 :
+
+                a = E*(Af*Nf**alpha+Bf*Nf**beta+ep0/100)*(2/(1-Rref))**n
+
+            else:  
+
+                a = E*((Af*Nf**alpha+Bf*Nf**beta)+(ep0/100))*((2/(1-Rref))**m)*(2**(n-m))
+
+            return a#a-sigma_reelle #sum((a-sigma_reelle)**2)
+
+        def_pl = 100*Af*Nf_graph**alpha
+
+        def_el = 100*Bf*Nf_graph**beta
+
+        #def_total=def_pl+def_el+ep0
+
+               
+
+    if choix_loi == 'mc' and choix_tose_tosp == 'tosp':
+
+        Af=resultats['Af'].loc[x]
+
+        Bf=resultats['Bf'].loc[x]
+
+        model=models[models['T (°C)']==temperatures[x]]
+
+        ep0=resultats['Seuil de deformation'].loc[x]
+
+        alpha = resultats['alpha'].loc[x]
+
+        beta=resultats['beta'].loc[x]
+
+        n=resultats['n'].loc[x]
+
+        m=resultats['n\''].loc[x]
+
+        def fon_graphes(paramt):
+
+            Rref,Nf = paramt
+
+            if Rref <= 0 :
+
+                a = E*(((Bf**2*Nf**(2*beta)+Af*Bf*Nf**(alpha+beta)) + ep0 / 100 * (2*Bf*Nf**(beta)+Af*Nf**(alpha) + ep0 / 100)) **0.5) * ((2 / (1 - Rref))**n)
+
+            else:
+
+                a = E*(((Bf**2*Nf**(2*beta)+Af*Bf*Nf**(alpha+beta)) + ep0 / 100 * (2*Bf*Nf**(beta)+Af*Nf**(alpha) + ep0 / 100))**0.5) * (2**(n - m)) * ((2 / (1 - Rref)) **m)
+
+            return a#a-sigma_reelle #sum((a-sigma_reelle)**2)
+
+        def_pl = 100*Af*Nf_graph**alpha
+
+        def_el = 100*Bf*Nf_graph**beta
+
+        def_total=def_pl+def_el+ep0
+
+           
+
+    R=resultats['Rref'].loc[x]
+
+    model=models[models['T (°C)']==temperatures[x]]
+
+    Nf=model[["Nf"]]#tose_input_translationb,tose_input.csv
+
+    sigma_calculee = fon_graphes([R,Nf_graph])#sigma calcule for graph
+
+    #sigma_calculee
+
+    sigma_calculee_exp = fon_graphes([R,Nf]) #sigma calculée avec Nf experimental
+
+    #sigma_calculee_exp
+
+    sigma_reelle=sigmas_reelles[x]
+
+   
+
+    #paramètres de graphes
+
+    Courbe_mini_l_calcule= 10 **(np.log10(sigma_calculee) - np.log10(resultats['lambda B0,1 retenu'].loc[x]))#BE
+
+    yinf=np.min(Courbe_mini_l_calcule)
+
+    Courbe_mini_l_spec= (sigma_calculee / lambda_specifie)#BF menu deroulant
+
+    sigmaexp1_15 = 1.15 * 10**sigma_reelle #BH
+
+    sigmaexp_sur1_15 = 10**sigma_reelle / 1.15 #BI
+
+   
+
+    #limites de graphes for axes
+
+    lim_yinf=int(np.min(Courbe_mini_l_calcule))
+
+    lim_ysup=math.ceil(np.max(10**sigma_reelle))
+
+    lim_yinflog=10**int(np.log10(np.min(Courbe_mini_l_calcule)))#Courbe_mini_l_spec
+
+    lim_ysuplog=10**math.ceil(np.max(sigma_reelle))
+
+    lim_yinf_mc_log=10**int(np.log10(np.min(Courbe_mini_l_spec)))
+
+    lim_ysup_mc_log=10**math.ceil(np.log10(np.max(10**sigma_reelle)))
+
+    lim_xinf=10**int(np.log10(np.min(Nf)))
+
+    lim_xsup=10**(math.ceil(np.log10(np.max(Nf)))+1)#+2
+
+    #print(lim_xinf,lim_xsup,'xlimwohler')
+
+    #print(lim_yinf,lim_ysup,'ylimwohler')
+
+    #print(lim_yinflog,lim_ysuplog,'ylimwohlerlog')
+
+    #print(lim_yinf_mc_log,lim_ysup_mc_log,'ylimwohler_mc log')
+
+    fig, (axs) = plt.subplots(nrows=1, ncols=3,figsize=(18, 5))
+
+    axs[0].plot(Nf,10**sigma_reelle, 'o', label='Points expérimentaux')
+
+    axs[0].plot(Nf_graph,sigma_calculee, label='Saeff (calculée)')
+
+    axs[0].plot(Nf_graph,Courbe_mini_l_calcule, label='Courbe mini lambda calculée')
+
+    axs[0].plot(Nf_graph,Courbe_mini_l_spec,label='Courbe mini lambda spécifiée')#
+
+    axs[0].set_xlim([lim_xinf, lim_xsup])
+
+    axs[0].set(xlabel='Nf',ylabel='Saeff(MPa)')
+
+    axs[0].set_ylim([lim_yinf, lim_ysup])
+
+    axs[0].set_xscale('log')
+
+    axs[0].legend()
+
+    axs[0].set_title("Courbe de Wöhler à "+str(temperatures[x]) + '° degrés')
+
+           
+
+    axs[1].plot(Nf,10**sigma_reelle, 'o', label='Points expérimentaux')
+
+    axs[1].plot(Nf_graph,sigma_calculee, label='Saeff (calculée)')
+
+    axs[1].plot(Nf_graph,Courbe_mini_l_calcule, label='Courbe mini lambda calculé')
+
+    axs[1].plot(Nf_graph,Courbe_mini_l_spec,label='Courbe mini lambda spécifié')
+
+    axs[1].set_xlim([lim_xinf, lim_xsup])
+
+    axs[1].set_ylim([lim_yinflog, lim_ysuplog])#([lim_yinf_mc_log, lim_ysup_mc_log])#([lim_yinflog, lim_ysuplog])
+
+    axs[1].set_title("Courbe de Wöhler log à "+str(temperatures[x]) + '° degrés')
+
+    axs[1].set(xlabel='Nf',ylabel='Saeff(MPa)')
+
+    axs[1].set_yscale('log')
+
+    axs[1].set_xscale('log')
+
+    axs[1].legend()
+
+       
+
+    axs[2].plot(10**sigma_reelle,sigma_calculee_exp,'o', label='Sigma TOSe')
+
+    axs[2].plot(10**sigma_reelle,10**sigma_reelle,label='Sigma experimental')
+
+    axs[2].plot(10**sigma_reelle,sigmaexp1_15, label='1.15 * Sigma exp')
+
+    axs[2].plot(10**sigma_reelle,sigmaexp_sur1_15, label='Sigma exp /1.15')
+
+    axs[2].set(xlabel='Sigma exp',ylabel='Sigma TOSe')
+
+    axs[2].set_title("Vérification TOS à "+str(temperatures[x]) + '° degrés')
+
+    axs[2].set_yscale('log')
+
+    axs[2].set_xscale('log')
+
+    axs[2].legend()
+
+       
+
+    if choix_loi == 'mc':
+
+        fig, (axs) = plt.subplots(nrows=1, ncols=3,figsize=(18, 5))
+
+        axs[0].plot(Nf,model['Dep/2 (%)'],'o', label='"Points expérimentaux')
+
+        axs[0].plot(Nf_graph,def_pl, label='MC ')
+
+        axs[0].set_xlim([int(np.min(Nf)-100), lim_xsup])
+
+        axs[0].set_ylim([0.0018,np.max(model['Det/2 (%)']-model['Dep/2 (%)']-ep0)+0.01])
+
+        axs[0].set_yscale('log')
+
+        axs[0].set_xscale('log')
+
+        axs[0].set_title("Vérification partie plastique à "+str(temperatures[x]) + '° degrés')
+
+        axs[0].set(xlabel='Nf', ylabel='Déf plastique(%)')
+
+       
+
+        axs[1].plot(Nf,model['Det/2 (%)']-model['Dep/2 (%)']-ep0,'o', label='"Points expérimentaux')
+
+        axs[1].plot(Nf_graph,def_el, label='MC ')
+
+        axs[1].set(xlabel='Nf')#,ylabel='Déf élastique(%)')
+
+        axs[1].set_title("Vérification partie élastique à "+str(temperatures[x]) + '° degrés')
+
+        axs[1].set_xlim([int(np.min(Nf))-100, lim_xsup])
+
+        axs[1].set_ylim([0.2,np.max(model['Det/2 (%)'])+0.01])
+
+        axs[1].set_yscale('log')
+
+        axs[1].set_xscale('log')
+
+        axs[1].legend()
+
+       
+
+        axs[2].plot(Nf,model['Det/2 (%)'],'o', label='"Points expérimentaux')
+
+        axs[2].plot(Nf_graph,def_el+def_pl+ep0, label='MC ')
+
+        #axs[2].ylabel('Déf totale(%)')
+
+        axs[2].set(xlabel='Nf')
+
+        axs[2].set_title("Vérification déformation totale à "+str(temperatures[x]) + '° degrés')
+
+        axs[2].set_xlim([int(np.min(Nf))-100, lim_xsup])
+
+        axs[2].set_ylim([0.2,1])
+
+        axs[2].set_xscale('log')
+
+        axs[2].set_yscale('log')
+
+ 
+
+   #Hétéroscedastiscité    
+
+for x in range(numberOfRows):
+
+    model=models[models['T (°C)']==temperatures[x]]
+
+    Nf=model["Nf"]
+
+    model['ev']=evaluations_fon_basquin[x]
+
+    slope, intercept, r_value, p_value, std_err = stats.linregress(Nf,evaluations_fon_basquin[x])
+
+    sns.lmplot(data=model,x='Nf', y='ev',fit_reg=True,line_kws={'label':"y={0:.11f}x + ({1:.11f})".format(slope,intercept)})
+
+   
+
+    #sns.regplot(x=Nf,y=evaluations_fon_basquin[x], fit_reg=True,line_kws={'label':"y={0:.11f}x + ({1:.11f})".format(slope,intercept)})
+
+    plt.title("Hétéroscédasticité de modèle à "+str(temperatures[x]) + '° degrés')
+
+    plt.ylabel('Résidus')
+
+    plt.xticks(rotation=20)
+
+    plt.legend()
+
+ 
+
+if choix_loi == 'mc' and choix_tose_tosp == 'tosp':
+
+    if numberOfRows == 1:
+
+        plt.plot(model['Dep/2 (%)']/100,model['Dsstab/2'],'o', label='"Points expérimentaux')
+
+        plt.plot(ecrouissage_axe_x,ecrouissage_axe_y,label='MC ')
+
+        plt.xlim([-0.0001, np.max(model['Dep/2 (%)']/100)])
+
+        plt.ylabel('sigma')
+
+        plt.legend()
+
+        plt.title("Ecrouissage à "+str(temperatures[x]) + '° degrés') #20230605-110422_1689147875
+
+        print("%angular <span ng-init=\"z.runParagraph('20230605-110422_1689147875')\"></span>")
+
+ 
+
+    else:
+
+        fig, (axs) = plt.subplots(nrows=1, ncols=len(temperatures),figsize=(18, 5))
+
+        ecrouissage_axe_x=np.array([0, 10**-5, 2.5*10**-5, 5*10**-5,1*10**-4, 2.5*10**-4, 5 * 10 **-4, 1 * 10 **-3, 2.5 * 10 **-3, 5 * 10 **-3, 1 * 10 **-2, 2.5 * 10 **-2, 5 * 10 **-2, 1 * 10** -1])
+
+        for x in range(numberOfRows):
+
+            #fig, ax = plt.subplots(figsize=(8, 6))
+
+            model=models[models['T (°C)']==temperatures[x]]
+
+            model['log(Dep/2)']=np.where(model['Dep/2 (%)']==0,0,np.log10(model['Dep/2 (%)']/100))
+
+            log_Dep = model[model['log(Dep/2)'] != 0] #dataframe à utiliser seulement pour la regression plastique, on ignore les rows qui ne l'ont pas
+
+            regression_ecrouissage = stats.linregress(log_Dep['log(Dep/2)'], np.log10(log_Dep['Dsstab/2']))
+
+            Kc=10**(regression_ecrouissage.intercept)
+
+            Mc=regression_ecrouissage.slope
+
+            ecrouissage_axe_y=Kc * ecrouissage_axe_x**Mc
+
+           
+
+            axs[x-1].plot(model['Dep/2 (%)']/100,model['Dsstab/2'],'o', label='"Points expérimentaux')
+
+            axs[x-1].plot(ecrouissage_axe_x,ecrouissage_axe_y,label='MC ')
+
+            axs[x-1].set_xlim([-0.0001, np.max(model['Dep/2 (%)']/100)])
+
+            axs[x-1].set_ylabel('sigma')
+
+            axs[x-1].set(xlabel='Def plastique')
+
+            axs[x-1].set_title("Ecrouissage à "+str(temperatures[x]) + '° degrés')
+
+            axs[x-1].legend()
+
+            axs[x-1].tick_params(labelrotation=20)
+
+ 
+
+   #Diagrammes de probabilité
+
+for x in range(numberOfRows):
+
+    p_value=scipy.stats.shapiro(evaluations_fon_basquin[x])[1]
+
+    p_value=round(p_value,4)
+
+    stats.probplot(evaluations_fon_basquin[x], plot=plt,rvalue=True,fit=True) #log(sigmamodel)-log(sigma_reel_des essais)
+
+    plt.title("Diagramme de probabilité de résidus à "+str(temperatures[x]) + '° degrés')
+
+    #plt.text(1, -0.06, "p value = " + str(p_value), size=9, rotation=0,ha="center", va="center",bbox=dict(boxstyle="round",ec=(1., 0.5, 0.5),              fc=(1., 0.8, 0.8),            )         )
+
+    if p_value>0.05:
+
+        plt.figtext(0.65,0.29,s='p value = ' + str(p_value), fontdict=None,color='k',bbox=dict(boxstyle="round",ec=(0.2, 0.55, 0.4),fc=(0.49, 0.9, 0.75)))#ec=(0, 0.58, 0.54),fc=(0.56, 0.88, 0.8)))
+
+    else:
+
+        plt.figtext(0.65,0.29,s='p value = ' + str(p_value), fontdict=None,fontstyle='italic',color='k',bbox=dict(boxstyle="round",ec=(1., 0.5, 0.5),fc=(1, 0.8, 0.8)))
+
+    plt.legend()
+
+    plt.show()
+
+ 
+
+#Courbes d'écrouissage
+
+if choix_loi == 'mc' and choix_tose_tosp == 'tosp':
+
+    d = {'Δεp/2 réel': model['Dep/2 (%)']/100, 'Δσ/2 réel': model['Dsstab/2']}
+
+    experimental=pd.DataFrame(data=d)
+
+    ecrouissage_export=pd.DataFrame(data={'εp':ecrouissage_axe_x,'σ':ecrouissage_axe_y})
+
+    writer = pd.ExcelWriter('/scality/mmm00/data/TOS/Ecrouissage '+material+'.xlsx',engine='xlsxwriter')  
+
+    workbook=writer.book
+
+    worksheet=workbook.add_worksheet('Ecrouissage')
+
+    writer.sheets['Ecrouissage'] = worksheet
+
+    experimental.to_excel(writer,sheet_name='Ecrouissage',startrow=0 , startcol=0,index=False)  
+
+    ecrouissage_export.to_excel(writer,sheet_name='Ecrouissage',startrow=0, startcol=2,index=False)
+
+    worksheet.write('E1', 'Kc')
+
+    worksheet.write('F1', 'Mc')
+
+    worksheet.write('E2', Kc)
+
+    worksheet.write('F2', Mc)
+
+    workbook.close()
+
+   
+
+else:
+
+    print('Courbe d\'Ecrouissage pas disponible pour ce type de modèle') 
