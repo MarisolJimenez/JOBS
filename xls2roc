@@ -1,0 +1,612 @@
+ if choix_tose_tosp1 == 'toseb':
+
+        choix_loi = 'basquin'
+
+    else:
+
+        choix_loi = 'mc'
+
+    if choix_tose_tosp1 == 'toseb' or choix_tose_tosp1 == 'tosemc':
+
+        choix_tose_tosp='tose'
+
+    else:
+
+        choix_tose_tosp='tosp'
+
+    if choix_loi != 'mc':
+
+        resultats_xls2roc['Af']=0
+
+        resultats_xls2roc['alpha']=0
+
+        resultats_xls2roc['Bf']=resultats_xls2roc['Bf']#/resultats_xls2roc['E']
+
+   
+
+else: #prendre les valeurs obtenues de TOS
+
+    coeff_models = resultats_export2#df avec les valeurs des températures reagropués #resultats_finals2
+
+    #coeff_models = coeff_models.drop(['Loi'], axis = 1)
+
+    temperatures=coeff_models['T'].unique()
+
+    numberOfRows=len(temperatures)
+
+    resultats_xls2roc=coeff_models.apply(pd.to_numeric)
+
+    #resultats_xls2roc['Facteur de proportionalité']=1
+
+    if choix_loi != 'mc':
+
+        resultats_xls2roc['Af']=0
+
+        resultats_xls2roc['alpha']=0
+
+        resultats_xls2roc['Bf']=resultats_xls2roc['K']#/resultats_xls2roc['E']
+
+        resultats_xls2roc['beta']=resultats_xls2roc['gamma']
+
+    else:
+
+        resultats_xls2roc['Bf']*resultats_xls2roc['E']
+
+ 
+
+if niveauStat_xl2roc =='bk':
+
+    #bk=(scipy.stats.norm.ppf(0.99)+scipy.stats.norm.ppf(C)*(1/nombre*(1-(scipy.stats.norm.ppf(C)**2)/2/(nombre-1))+(scipy.stats.norm.ppf(0.99)**2)/2/(nombre-1))**0.5)/(1-(scipy.stats.norm.ppf(C)**2)/2/(nombre-1))     #if bk<3:
+
+    resultats['bk']=resultats['Lambda Bk retenu'] #else :  niveauStat_xl2roc ='cancel_bk'    print('k calculé plus grand que 3, graphes du niveau Bk sont analogues aux graphes du niveau B0.1')
+
+ 
+
+#B0.1 prendre la valeur donnée pour le modèle qu'on vient de créer:
+
+resultats['b1']= 10**(2.33*np.log10(resultats['lambda B0,1 retenu'])/3) #2
+
+resultats['b10']= 10**(1.28*np.log10(resultats['lambda B0,1 retenu'])/3) #3
+
+resultats['typique b50']= 1
+
+nb_R = 40 #points de rapport de déf    
+
+if fermeture=='oui':
+
+    nb_R_ferm = nb_R - (1 - R_ferm) / (2 / nb_R) + 1 #index de la serie -1,-0.95,.... 0.95 où on trouve le valeur de fermeture demandée
+
+    nb_R_ferm=int(nb_R_ferm)  
+
+points_R= np.round(np.linspace(-1, 1, 40,endpoint=False),2)
+
+ 
+
+#nombre de points sur les graphes en fonction de Nmin et Nmax
+
+nb_pts = int(2 + (0.1 * int(10 * np.log10(Nmax)) - 0.1 * int(10 * np.log10(Nmin))) / 0.1 + 2)-1 #pour graphes fatigue
+
+nb_pts_2 = (2 + (int(np.log10(Nmax)) - int(np.log10(Nmin))) + 2)-1 #goodman
+
+goodman_x = (1 + points_R) / (1 - points_R) #constante à multiplier
+
+#print(nb_pts,nb_pts_2)
+
+Nf_graphe2=np.empty([nb_pts])
+
+ 
+
+if Nmax > 100000000:
+
+    Nf_graphe2[0] = Nmax + Nmax / 100000000 #1ere ligne de la colonne Nf
+
+else:
+
+    Nf_graphe2[0] = Nmax + 1
+
+Nf_graphe2[1] = Nmax #2eme ligne de la colonne Nf row 8
+
+Nf_graphe2[2] = 10 **(0.1 * int(10 * np.log10(Nmax)))
+
+Nf_graphe2[nb_pts-2]=Nmin
+
+Nf_graphe2[nb_pts-1]=1
+
+ 
+
+for x in range(2,nb_pts-2):
+
+    Nf_graphe2[x] = 10 ** (np.log10(Nf_graphe2[x-1]) - 0.1)  
+
+Nf_graphe2=np.round(Nf_graphe2,5)
+
+ 
+
+#fonction to calculate Seff pour chaque niveau statistique et temp
+
+def significance(lambdalevel,Nf_gra):
+
+    colonnesSeff_goodman_b0_1= pd.DataFrame()
+
+    if choix_tose_tosp == 'tosp' and type_xl2roc=='tos_toutR':
+
+        for x in range(numberOfRows):
+
+            colonneSeff = resultats['Facteur de proportionalité'].loc[x] * (resultats['E'].loc[x] * ((resultats['Bf'].loc[x] ** 2 * Nf_gra ** (2 * resultats['beta'].loc[x]) + resultats['Af'].loc[x] * resultats['Bf'].loc[x] * Nf_gra ** (resultats['alpha'].loc[x] + resultats['beta'].loc[x])) + resultats['Seuil de deformation'].loc[x] * (2 *resultats['Bf'].loc[x] * Nf_gra ** (resultats['beta'].loc[x]) + resultats['Af'].loc[x] * Nf_gra ** (resultats['alpha'].loc[x]) + resultats['Seuil de deformation'].loc[x])) ** 0.5) / lambdalevel.loc[x]
+
+            colonnesSeff_goodman_b0_1[x]=colonneSeff
+
+    else:
+
+        for x in range(numberOfRows):
+
+            colonneSeff = resultats['Facteur de proportionalité'].loc[x] *(resultats['E'].loc[x]*(resultats['Af'].loc[x] * Nf_gra**resultats['alpha'].loc[x]+resultats['Bf'].loc[x] * Nf_gra**resultats['beta'].loc[x] + resultats['Seuil de deformation'].loc[x])) / lambdalevel.loc[x]
+
+            colonnesSeff_goodman_b0_1[x]=colonneSeff
+
+               
+
+   
+
+    return colonnesSeff_goodman_b0_1    
+
+   
+
+colonnesSeff_b0_1=significance(resultats['lambda B0,1 retenu'],Nf_graphe2)
+
+colonnesSeff_b1=significance(resultats['b1'],Nf_graphe2)
+
+colonnesSeff_b10=significance(resultats['b10'],Nf_graphe2)
+
+colonnesSeff_b50_typ=significance(resultats['typique b50'],Nf_graphe2)
+
+ 
+
+if niveauStat_xl2roc =='bk':
+
+    colonnesSeff_bk=significance(resultats['bk'],Nf_graphe2)
+
+    colonnesSeff_bk.columns = temperatures
+
+   
+
+colonnesSeff_b0_1.columns = temperatures
+
+colonnesSeff_b1.columns = temperatures
+
+colonnesSeff_b10.columns = temperatures
+
+colonnesSeff_b50_typ.columns = temperatures
+
+ 
+
+#fonction to create first column pour les courbes de Wöhler
+
+#colonneSeff*walker, seff change pour chaq niveau statis, pour chaq temp on change aussi les parametres n,m,R,ep0
+
+def fon_walker(paramt):
+
+    Seff,Rmodel,Rgraphe,n,m= paramt
+
+    if Rmodel<= 0 and Rgraphe<=0:
+
+        seff_calculee_tot = Seff * (( (2 / (1 - Rgraphe)) ** -n) * (2 / (1 - Rmodel)) ** n)
+
+   
+
+    elif Rmodel<= 0 and Rgraphe>0:
+
+        seff_calculee_tot = Seff *(((2 / (1 - Rgraphe)) ** -m) * ((2 / (1 - Rmodel)) ** n) * (2 ** (m - n)))
+
+       
+
+    elif Rmodel>0 and Rgraphe<=0:
+
+        seff_calculee_tot = Seff * (((2 / (1 - Rgraphe)) ** -n) * ((2 / (1 - Rmodel)) ** m) * (2 ** (n - m)))
+
+       
+
+    else:
+
+        seff_calculee_tot = Seff * (((2 / (1 - Rgraphe)) ** -m) * ((2 / (1 - Rmodel)) ** m) * (2 ** (n - m)) * (2 ** (m - n)))
+
+       
+
+    return seff_calculee_tot
+
+#points sur l'axe y de graphes de Goodman
+
+Nf_graphe_goodman=np.empty([nb_pts_2])
+
+Nf_graphe_goodman[0]=Nf_graphe2[0]
+
+Nf_graphe_goodman[1]=Nf_graphe2[1]
+
+Nf_graphe_goodman[2]=10 ** int(np.log10(Nmax)-1)
+
+for i in range(3,nb_pts_2-2):
+
+    Nf_graphe_goodman[i] = 10 **(np.log10(Nf_graphe_goodman[i-1]) - 1)
+
+   
+
+Nf_graphe_goodman[nb_pts_2-2]=Nmin
+
+Nf_graphe_goodman[nb_pts_2-1]=1
+
+#Nf_graphe_goodman
+
+#Seff pour les graphes de type goodman, en fonction de Nf
+
+colonnesSeff_goodman_b0_1=significance(resultats['lambda B0,1 retenu'],Nf_graphe_goodman)
+
+colonnesSeff_goodman_b1=significance(resultats['b1'],Nf_graphe_goodman)
+
+colonnesSeff_goodman_b10=significance(resultats['b10'],Nf_graphe_goodman)
+
+colonnesSeff_goodman_b50_typ=significance(resultats['typique b50'],Nf_graphe_goodman)
+
+if niveauStat_xl2roc =='bk':
+
+    colonnesSeff_goodman_bk=significance(resultats['bk'],Nf_graphe_goodman)
+
+    colonnesSeff_goodman_bk.columns = temperatures
+
+ 
+
+def lignex(pointsRgraphe_good,Nf,nb_R):
+
+    goodmanxNf={}
+
+    for x in range(numberOfRows):   #pour chaque temp
+
+        goodmanxNf[x]={}
+
+        for y in range(nb_R):#pour chaque niveau de R
+
+            goodmanxNf[x][y]=pointsRgraphe_good[x][y][Nf]
+
+    return goodmanxNf  
+
+def ligney(pointsRgraphe_good,Nf,nb_R):
+
+    goodmanyNf={}
+
+    for x in range(numberOfRows):  
+
+        goodmanyNf[x]={}
+
+        for y in range(nb_R):#pour chaque niveau de R
+
+            goodmanyNf[x][y]=pointsRgraphe_good[x][y][Nf]
+
+    return goodmanyNf        
+
+#colonne auxiliar de walker colonne C, pour toutes les méthodes sauf TOS pour tout R
+
+#colonneSeff_goodman*walker, seff change pour chaq niveau statis, pour chaq temp on change aussi les parametres n,m,R,ep0
+
+def fon_walker1(paramt):
+
+    Seff,Rmodel,n,m= paramt
+
+    if Rmodel<= 0:
+
+        seff_calculee_tot = Seff * ((2 / (1 - Rmodel)) ** n)
+
+    else:
+
+        seff_calculee_tot = Seff *((2 / (1 - Rmodel)) ** m) * (2 ** (n - m))
+
+    return seff_calculee_tot
+
+
+
+
+ #points pour Wöhler graphes
+
+#tous les niveaux significatives TOS pour tout R
+
+#def points_y_wohler(temps,seff): #fonction qui ne prend pas en compte la fermeture
+
+ #   pointsy_R_graphe_fon={}
+
+  #  for x in range(temps):
+
+   #     pointsy_R_graphe_fon[x]={}
+
+    #    for y in range(nb_R):
+
+     #       pointsy_R_graphe_fon[x][y]=fon_walker([seff[temperatures[x]],resultats['R'].loc[x],points_R[y],resultats['n'].loc[x],resultats['n\''].loc[x]])
+
+      #      pointsy_R_graphe_fon[x][y][0]=1 #premier point
+
+       #     pointsy_R_graphe_fon[x][y][nb_pts-1]=pointsy_R_graphe_fon[x][y][nb_pts-2]+1 #dernier point
+
+    #return pointsy_R_graphe_fon    
+
+if type_xl2roc=='tos_toutR':
+
+    def points_y_wohler(temps,seff,longueur,fermeture_niveau_stat):
+
+        pointsy_R_graphe_fon={} #création d'un dictionnaire
+
+        for x in range(temps): #le premier niveau de dictionnaire sera par temperature
+
+            pointsy_R_graphe_fon[x]={}
+
+            for y in range(nb_R): #le deuxieme niveau de dictionnaire sera pour le Rapport de chargement
+
+                pointsy_R_graphe_fon[x][y]=fon_walker([seff[temperatures[x]],resultats['Rref'].loc[x],points_R[y],resultats['n'].loc[x],resultats['n\''].loc[x]])
+
+                if fermeture=='oui' and y > nb_R_ferm-1: #si une fermeture est demandée
+
+                    auxiliar=pointsy_R_graphe_fon[x][nb_R_ferm-1]*goodman_x[
+
+                        nb_R_ferm-1]!= resultats[fermeture_niveau_stat].loc[x] #seff de réference, seff correspondant à niveau de rapport de la fermeture, multiplie par (1+R/1-R)
+
+                    a = -pointsy_R_graphe_fon[x][nb_R_ferm-1] / (resultats[fermeture_niveau_stat].loc[x] - pointsy_R_graphe_fon[x][nb_R_ferm-1] * goodman_x[nb_R_ferm-1])
+
+                    b = pointsy_R_graphe_fon[x][nb_R_ferm-1] - a * pointsy_R_graphe_fon[x][nb_R_ferm-1] * goodman_x[nb_R_ferm-1]
+
+                    colonne_ab = b / (1 - a * goodman_x[y]) #cas ou ce valeur soit different à Rm
+
+                    colonne_normal = resultats[fermeture_niveau_stat].loc[x] * goodman_x[y] #cas où on a arrivé a la valeur de Rm
+
+                    for items in auxiliar:
+
+                        if items== True:
+
+                            pointsy_R_graphe_fon[x][y]=colonne_ab
+
+                        else:
+
+                            pointsy_R_graphe_fon[x][y]=colonne_normal
+
+                pointsy_R_graphe_fon[x][y][0]=1 #premier point
+
+                pointsy_R_graphe_fon[x][y][longueur-1]=pointsy_R_graphe_fon[x][y][longueur-2]+1 #dernier point
+
+        return pointsy_R_graphe_fon    
+
+               
+
+    pointsy_R_graphe=points_y_wohler(numberOfRows,colonnesSeff_b0_1,nb_pts,'Rm mini (MPa)')
+
+    pointsy_R_grapheb1=points_y_wohler(numberOfRows,colonnesSeff_b1,nb_pts,'Rm_b1')#niveau de significance b1
+
+    pointsy_R_grapheb10=points_y_wohler(numberOfRows,colonnesSeff_b10,nb_pts,'Rm_b10')
+
+    pointsy_R_grapheb50=points_y_wohler(numberOfRows,colonnesSeff_b50_typ,nb_pts,'Rm typique (MPa)')
+
+    if niveauStat_xl2roc =='bk':
+
+        pointsy_R_graphebk=points_y_wohler(numberOfRows,colonnesSeff_bk,nb_pts,'Rm bk (MPa)')
+
+       
+
+   
+
+    #Goodman axe y
+
+    pointsy_R_graphe_goodman = points_y_wohler(numberOfRows,colonnesSeff_goodman_b0_1,nb_pts_2,'Rm mini (MPa)')        
+
+    pointsy_R_graphe_goodman1 = points_y_wohler(numberOfRows,colonnesSeff_goodman_b1,nb_pts_2,'Rm_b1')    
+
+    pointsy_R_graphe_goodman10 = points_y_wohler(numberOfRows,colonnesSeff_goodman_b10,nb_pts_2,'Rm_b10')
+
+    pointsy_R_graphe_goodman50 = points_y_wohler(numberOfRows,colonnesSeff_goodman_b50_typ,nb_pts_2,'Rm typique (MPa)')
+
+    if niveauStat_xl2roc =='bk':
+
+        pointsy_R_graphe_goodmank = points_y_wohler(numberOfRows,colonnesSeff_goodman_bk,nb_pts_2,'Rm bk (MPa)')
+
+       
+
+   
+
+    #points pour axe x en fonction de axe y, Goodman
+
+    #Goodman axe x
+
+    def points_x_goodman(pointsy_goodman):
+
+        pointsx_R_graphe_goodman_fon={}
+
+        for x in range(numberOfRows):   #pour chaque temp
+
+            pointsx_R_graphe_goodman_fon[x]={}
+
+            for y in range(nb_R): #pour chaque niveau de R
+
+                pointsx_R_graphe_goodman_fon[x][y]=goodman_x[y]*pointsy_goodman[x][y]
+
+        return pointsx_R_graphe_goodman_fon    
+
+   
+
+    pointsx_R_graphe_goodman = points_x_goodman(pointsy_R_graphe_goodman)    
+
+    pointsx_R_graphe_goodman1 = points_x_goodman(pointsy_R_graphe_goodman1)
+
+    pointsx_R_graphe_goodman10 = points_x_goodman(pointsy_R_graphe_goodman10)
+
+    pointsx_R_graphe_goodman50 = points_x_goodman(pointsy_R_graphe_goodman50)
+
+    if niveauStat_xl2roc =='bk':
+
+        pointsx_R_graphe_goodmank = points_x_goodman(pointsy_R_graphe_goodmank)
+
+ 
+
+                                                    #Gerber graphes de Wöhler
+
+            #points pour Wöhler graphes tous les niveaux significatives, cas parabole de Gerber
+
+elif type_xl2roc=='gerber':
+
+    def points_y_wohler1(temps,seff,longueur,fermeture_niveau_stat):
+
+        pointsy_R_graphe_gerberfon={}
+
+        for x in range(temps):
+
+            pointsy_R_graphe_gerberfon[x]={}
+
+            for y in range(0,nb_R):
+
+                pointsy_R_graphe_gerberfon[x][y]=(points_R[y] - 1 + ((1 - points_R[y])** 2 + 4 * (fon_walker1([seff[temperatures[x]],resultats['Rref'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x]]) * (1 + points_R[y]) / resultats[fermeture_niveau_stat].loc[x])** 2) ** 0.5) / (fon_walker1([seff[temperatures[x]],resultats['Rref'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x]]) * ((1 + points_R[y]) / resultats[fermeture_niveau_stat].loc[x]) ** 2) * (1 - points_R[y]) / 2
+
+                if y==0:
+
+                    pointsy_R_graphe_gerberfon[x][y]=fon_walker1([seff[temperatures[x]],resultats['Rref'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x]])
+
+                pointsy_R_graphe_gerberfon[x][y][0]=1 #premier point
+
+                pointsy_R_graphe_gerberfon[x][y][longueur-1]=pointsy_R_graphe_gerberfon[x][y][longueur-2]+1 #dernier point
+
+        return pointsy_R_graphe_gerberfon
+
+               
+
+    pointsy_R_graphe_gerber=points_y_wohler1(numberOfRows,colonnesSeff_b0_1,nb_pts,'Rm mini (MPa)')
+
+    pointsy_R_graphe_gerberb1=points_y_wohler1(numberOfRows,colonnesSeff_b1,nb_pts,'Rm_b1')
+
+    pointsy_R_graphe_gerberb10=points_y_wohler1(numberOfRows,colonnesSeff_b10,nb_pts,'Rm_b10')
+
+    pointsy_R_graphe_gerberb50=points_y_wohler1(numberOfRows,colonnesSeff_b50_typ,nb_pts,'Rm typique (MPa)')
+
+    if niveauStat_xl2roc =='bk':
+
+        pointsy_R_graphe_gerberbk=points_y_wohler1(numberOfRows,colonnesSeff_bk,nb_pts,'Rm bk (MPa)')
+
+   
+
+    #pointage pour Gerber (Goodman=parabole de Gerber),
+
+    #premier ligne c'est le resultat du fon_walker, les suivants c'est la formule
+
+    def points_y_gerber(temps,seff,fermeture_niveau_stat):
+
+        pointsy_R_graphe_gerber_goodman1={}
+
+        for x in range(temps):
+
+            pointsy_R_graphe_gerber_goodman1[x]={}
+
+            for y in range(0,nb_R):
+
+                pointsy_R_graphe_gerber_goodman1[x][y]=(points_R[y] - 1 + ((1 - points_R[y])** 2 + 4 * (fon_walker1([seff[temperatures[x]],resultats['Rref'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x]]) * (1 + points_R[y]) / resultats[fermeture_niveau_stat].loc[x])** 2) ** 0.5) / (fon_walker1([seff[temperatures[x]],resultats['Rref'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x]]) * ((1 + points_R[y]) / resultats[fermeture_niveau_stat].loc[x]) ** 2) * (1 - points_R[y]) / 2
+
+                if y==0:
+
+                    pointsy_R_graphe_gerber_goodman1[x][y]=fon_walker1([seff[temperatures[x]],resultats['Rref'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x]])
+
+                pointsy_R_graphe_gerber_goodman1[x][y][0]=1 #premier point
+
+                pointsy_R_graphe_gerber_goodman1[x][y][nb_pts_2-1]=pointsy_R_graphe_gerber_goodman1[x][y][nb_pts_2-2]+1 #dernier point
+
+        return pointsy_R_graphe_gerber_goodman1
+
+       
+
+    pointsy_R_graphe_gerber_goodman=points_y_gerber(numberOfRows,colonnesSeff_goodman_b0_1,'Rm mini (MPa)')
+
+    pointsy_R_graphe_gerber_goodman1=points_y_gerber(numberOfRows,colonnesSeff_goodman_b1,'Rm_b1')
+
+    pointsy_R_graphe_gerber_goodman10=points_y_gerber(numberOfRows,colonnesSeff_goodman_b10,'Rm_b10')
+
+    pointsy_R_graphe_gerber_goodman50=points_y_gerber(numberOfRows,colonnesSeff_goodman_b50_typ,'Rm typique (MPa)')
+
+    if niveauStat_xl2roc =='bk':    
+
+        pointsy_R_graphe_gerber_goodmank=points_y_gerber(numberOfRows,colonnesSeff_goodman_bk,'Rm bk (MPa)')
+
+ 
+
+    #points pour axe x en fonction de axe y
+
+    pointsx_R_graphe_gerber_goodman={}
+
+    for x in range(numberOfRows):   #pour chaque temp
+
+        pointsx_R_graphe_gerber_goodman[x]={}
+
+        for y in range(nb_R): #pour chaque niveau de R
+
+            pointsx_R_graphe_gerber_goodman[x][y]=goodman_x[y]*pointsy_R_graphe_gerber_goodman[x][y]
+
+   
+
+    pointsx_R_graphe_gerber_goodman1={}
+
+    for x in range(numberOfRows):   #pour chaque temp
+
+        pointsx_R_graphe_gerber_goodman1[x]={}
+
+        for y in range(nb_R): #pour chaque niveau de R
+
+            pointsx_R_graphe_gerber_goodman1[x][y]=goodman_x[y]*pointsy_R_graphe_gerber_goodman1[x][y]
+
+     
+
+    pointsx_R_graphe_gerber_goodman10={}
+
+    for x in range(numberOfRows):   #pour chaque temp
+
+        pointsx_R_graphe_gerber_goodman10[x]={}
+
+        for y in range(nb_R): #pour chaque niveau de R
+
+            pointsx_R_graphe_gerber_goodman10[x][y]=goodman_x[y]*pointsy_R_graphe_gerber_goodman10[x][y]
+
+     
+
+    pointsx_R_graphe_gerber_goodman50={}
+
+    for x in range(numberOfRows):   #pour chaque temp
+
+        pointsx_R_graphe_gerber_goodman50[x]={}
+
+        for y in range(nb_R): #pour chaque niveau de R
+
+            pointsx_R_graphe_gerber_goodman50[x][y]=goodman_x[y]*pointsy_R_graphe_gerber_goodman50[x][y]
+
+           
+
+    if niveauStat_xl2roc =='bk':
+
+        pointsx_R_graphe_gerber_goodmank={}
+
+        for x in range(numberOfRows):   #pour chaque temp
+
+            pointsx_R_graphe_gerber_goodmank[x]={}
+
+            for y in range(nb_R): #pour chaque niveau de R
+
+                pointsx_R_graphe_gerber_goodmank[x][y]=goodman_x[y]*pointsy_R_graphe_gerber_goodmank[x][y]
+
+ 
+
+elif type_xl2roc=='rmoins1':
+
+    #pointage if methode R=-1 Wöhler
+
+    pointsy_R_graphe_lineaire={}
+
+    for x in range(numberOfRows):
+
+        pointsy_R_graphe_lineaire[x]={}
+
+        for y in range(0,nb_R):
+
+            pointsy_R_graphe_lineaire[x][y]=fon_walker1([colonnesSeff_b0_1[temperatures[x]],resultats['Rref'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x]])/ (1 +(fon_walker1([colonnesSeff_b0_1[temperatures[x]],resultats['Rref'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x]]) /resultats['Rm mini (MPa)'].loc[x] * (1 + points_R[y])  /(1 - points_R[y])))
+
+            if y==0:
+
+                pointsy_R_graphe_lineaire[x][y]=fon_walker1([colonnesSeff_b0_1[temperatures[x]],resultats['Rref'].loc[x],resultats['n'].loc[x],resultats['n\''].loc[x]])
+
+            pointsy_R_graphe_lineaire[x][y][0]=1 #premier point
+
+            pointsy_R_graphe_lineaire[x][y][nb_pts-1]=pointsy_R_graphe_lineaire[x][y][nb_pts-2]+1 #dernier point   
