@@ -1,0 +1,326 @@
+---
+title: "Cartes de contrôle"
+author: "Jiménez Marisol"
+date: "2023-02-08"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r,include=FALSE}
+library(qicharts2)
+library(ggplot2)
+library(cowplot)
+library(qcc)
+#https://spcgroup.com.mx/grafica-de-control-xbar-r/
+```
+
+## Exemple 1
+On considère un procédé qui, sous controle, suit une loi normale $N (10, 0.1)$. Construire une carte de controle de Shewart $(\bar{X}, S)$ de phase $II$. Commenter les résultats obtenus.
+
+```{r, include=FALSE}
+col_names= c('sgr','mesure')
+my_data <- read.table("//Users//mmjj//Documents//UPPA//MSID//Maitrise ststq procedes//Projet fichiers/exemple1.txt",
+                      header=FALSE,col.names = col_names)
+
+print(dim(my_data))
+#head(my_data)
+```
+
+```{r,include=FALSE}
+p<-qic(mesure, 
+    x     = sgr, 
+    data  = my_data,
+    cl = 10,
+    target = c(9.975423),
+    #y.expand = 10.02458,
+    decimals    = 6,
+    chart = 'xbar',
+    title  = 'Average (Xbar chart)',
+    ylab  = 'mesure',
+    xlab  = 'sous-groupe',
+    show.labels = TRUE)
+p
+```
+
+
+Pour la carte $\bar{X}$ on a $LIC=9.975423,$ $LSC = 10.02458$, et $\mu=10$
+ 
+```{r, include=FALSE}
+p2 <- p$data
+x_carte <- ggplot(p2,aes(x,y)) +
+  geom_ribbon(aes(ymin = 9.975423,ymax = 10.02458), fill = "blue",alpha = 0.1)+
+  geom_line(colour = "cyan3", size = .75) + 
+  geom_hline(yintercept=10,linetype=1,colour = "purple") + 
+  geom_hline(yintercept =9.975423,linetype=5,colour = "purple") +
+  geom_hline(yintercept = 10.02458,linetype=5,colour = "purple") +
+  geom_point(colour = "cyan3" , fill = "black", size = 1.5) +
+  scale_y_continuous(breaks = c(9.89,9.97542,10,10.02458,10.1)) + 
+  labs(x = "sous-groupe",y = "mesures") +
+  ggtitle(label = "X carte")
+#Si nous considérons en phase $I$  les limites sont lic = 9.847369, lsc = 10.15263
+```
+
+```{r}
+x_carte
+```
+
+
+```{r,include=FALSE}
+cs<-qic(mesure, 
+    x     = sgr, 
+    data  = my_data,
+    chart = 's',
+    #title  = 'Average (Xbar chart)',
+    ylab  = 'mesure',
+    xlab  = 'Sous-groupe',
+    show.labels = TRUE)
+cs
+```
+
+
+```{r,include=FALSE}
+p2s <- cs$data
+
+#sp + geom_hline(yintercept=20)
+s_carte <- ggplot(p2s,aes(x,y)) +
+  geom_ribbon(aes(ymin = 0,ymax = 0.1963523), fill = "blue",alpha = 0.1)+
+  geom_line(colour = "cyan3", size = .75) + 
+  geom_hline(yintercept=0.094,linetype=1,colour = "purple") + 
+  geom_hline(yintercept =0,linetype=5,colour = "purple") +
+  geom_hline(yintercept = 0.1963523,linetype=5,colour = "purple") +
+  geom_point(colour = "cyan3" , fill = "black", size = 1.5) +
+  scale_y_continuous(breaks = c(0,0.1164316,0.1963523,0.2233903,0.094)) +
+  labs(x = "sous-groupe",y = "mesures") +
+ggtitle(label = "S carte")
+#10-((0.3/sqrt(149))*3)10
+#plot_grid(ichart, icharts, labels=c("Carte X", "Carte S"), ncol = 2, nrow = 1)
+#Dans la phase I de la carte S on a que  cl = 0.1164316, lcl=lic=0 et ucl=lsc= 0.2233903
+#mais en phase II on a cl=0.094, lic= -0.0083523, lsc=0.1963523
+
+```
+Pour la carte $S$ on a $LC=0.094$, $LSC = 0.1963523$ et $LIC=-0.0083,$ alors nous fixons $LIC=0$
+```{r}
+s_carte
+```
+
+Nous pouvons voir que la carte de contrôle $S$ semble être sous contrôle presque dans tous les sous-groupes sauf dans l'échantillon 28, où nous sortons de la limite supérieure. Dans cette carte nous pouvons également voir qu'après l'échantillon 20, il y a 5 points consécutifs au-dessus de la moyenne, ce qui nous convie à poursuivre l'analyse de la carte de controle de $\bar{X}$ Le carte de $\bar{X}$ confirme que le processus est hors de contrôle, sous l'hypothèse que le prodédé suit une loi normale $N (10, 0.1)$, parce que plus de la moitié des échantillons ont leur moyenne en dehors des limites de contrôle, de plus la plupart de ces points sont en dessous de la moyenne, ce qui signifie une performance inférieure à celle attendue.
+
+```{r,include=FALSE}
+#plot_grid(x_carte, s_carte, ncol = 2, nrow = 1)
+```
+
+## Exemple 2
+Une entreprise fabrique des alarmes incendie et teste leur qualité en mesurant leur
+rapidité de réaction. Pour cela les alarmes sont placées dans une pièce où de la fumée est
+introduite. Chaque alarme teste l’atmosphère de la pièce une fois par seconde. D’après les
+normes à respecter le temps de réaction de l’alarme doit, en moyenne, être égal à 5 secondes dans des conditions expérimentales normalisées reproduites ici. Le responsable de l’entreprise pense que cette production n’est pas sous contrôle (principalement à cause de l’alarme qui a mis 17 secondes pour réagir). Etes-vous d’accord avec lui ?
+
+```{r,include = FALSE}
+y <-c(5,3,3,6,1,4,2,3,8,7,4,5,5,3,17,6,5,1,8,4)
+individuel<-qic(y, chart = 'i')
+mrindividuel<-qic(y, chart = 'mr')
+```
+Nous commençons par une carte de contrôle pour valeurs individuelles, où évidemment l'observacion qui correspond à la valeur 17 secondes se distinguera )
+```{r,include=FALSE}
+c_ind<-qic(y, chart = 'i', xlab  = 'sous-groupe', ylab  = 'valeur',title  = 'Carte de contrôle pour valeurs individuelles')
+```
+```{r}
+c_ind
+```
+
+
+Afin d'avoir plus d'informations, nous examinons en détail ce que nous avons obtenu.
+```{r}
+summary(individuel)
+```
+Même lorsque nous avons une valeur atypique, nous n'avons pas un nombre inhabituel de croisements, le minimum est de 4 et nous avons 8; également le nombre maximum de points du même côté par rapport à la moyenne est de 4, étant donné que la limite est de 7. En plus, dans le sous-groupe rationnel suivant, tout revient à la normalité. Rappelons qu'il existe une probabilité de trouver des points de non-contrôle même lorsque le processus est contrôlé. Nous concluons que le processus est contrôlé.
+
+```{r,include=FALSE}
+#Nous poursuivons avec l'analyse de << Moving ranges of individual measurements >> pour enrichir notre perspective.  
+#qic(y, chart = 'mr')
+
+#Dans cette carte, nous constatons également que le système est hors de contrôle, et que l'amplitude du mouvement est trop grande pour des données provenant d'une population stable et normalement distribuée; presque toutes les valeurs sont inférieures à la moyenne, $3.63$. Nous concluons que le processus n'est pas en état de contrôle statistique.
+```
+
+
+```{r,include=FALSE}
+#qic(y1, chart = 'mr')
+#y1 <-c(5,3,3,6,1,4,2,3,8,7,4,5,5,3,6,5,1,8,4)
+```
+
+```{r,include=FALSE}
+#Voyons ce qui se passe lorsque nous retirons ce sous-groupe de notre analyse.
+#qic(y[-15], chart = 'i')
+```
+
+
+## Exemple 3
+
+On considère un procédé devant suivre une loi normale. Construire, à partir des 20
+sous-groupes rationnels observés, une carte de contrôle de Shewart $(\bar{X},R)$ de phase $I$. Commenter les résultats obtenus.
+
+```{r, include=FALSE}
+col_names= c('sgr','mesure')
+my_data3 <- read.table("//Users//mmjj//Documents//UPPA//MSID//Maitrise ststq procedes//Projet fichiers/exemple3.txt",
+                      header=FALSE,col.names = col_names)
+
+print(dim(my_data3))
+head(my_data3)
+```
+
+Pour la carte $\bar{X}$ on a $LIC=18.36054,$ $LSC = 21.72935$, et $\bar{\bar{X}} = 20.04495$
+
+Cela semble bon car nous ne sortons jamais des limites et nous ne nous approchons jamais de la limite supérieure ou inférieure.
+```{r,include=FALSE}
+xbar<-qic(mesure, 
+    x     = sgr, 
+    data  = my_data3,
+    #cl = 10,
+    #target = c(9.975423),
+    #y.expand = 10.02458,
+    decimals    = 3,
+    chart = 'xbar',
+    title  = 'X carte',
+    ylab  = 'mesure',
+    xlab  = 'sous-groupe',
+    show.labels = TRUE)
+```
+```{r}
+xbar
+```
+
+Dans la carte R on trouve qu'à partir du sous-groupe 16 le processus semble perdre sa stabilité et devient hors contrôle.
+
+```{r,include=FALSE}
+r_carte<-qic(mesure, 
+    x     = sgr, 
+    data  = my_data3,
+    chart = 'mr',
+    title  = 'R Carte',
+    ylab  = 'mesure',
+    xlab  = 'sous-groupe',
+    show.labels = TRUE)
+```
+```{r}
+r_carte
+```
+
+Avant de sauter aux conclusions, voyons ce que donne la carte $S$ qui est plus riche parce que nous y utilisons tout l'information de chaque sous-groupe. Finalement tout est conforme aux limites et nous ne voyons pas le comportement qui était sur la carte $R$, donc nous confirmons que tout reste sous contrôle.
+```{r,include=FALSE}
+s_carte3<-qic(mesure, 
+    x     = sgr, 
+    data  = my_data3,
+    chart = 's',
+    title  = 'S Carte',
+    ylab  = 'mesure',
+    xlab  = 'sous-groupe',
+    show.labels = TRUE)
+```
+```{r}
+s_carte3
+```
+
+
+## Exemple 4
+Une entreprise s’intéresse au nombre total de défauts d’aspect comptabilisés sur un
+produit fini. Pour être sous-contrôle la production doit être réalisée avec un nombre moyen de défauts d’aspect de l’ordre de $8$. Ces divers nombres ont été relevés pour un échantillon de $50$ observations. On impose ici une étude à l’aide d’une carte de contrôle de phase II avec limites probabilistes associées à un risque d’erreur de première espèce ne dépassant pas $10\%$. Construire la carte demandée et commenter les résultats obtenus.
+```{r, include=FALSE}
+col_names= c('defauts')
+my_data4 <- read.table("//Users//mmjj//Documents//UPPA//MSID//Maitrise ststq procedes//Projet fichiers/exemple4.txt",
+                      header=FALSE,col.names = col_names)
+
+print(dim(my_data4))
+head(my_data4)
+```
+
+Comme nous avons un processus qui suivi le nombre de défauts d'une population, la carte de contrôle correspondant est la carte de contrôle de type $c.$ Le processus sous contrôle doit suivre une loi de Poisson de paramètre $\lambda = 8.$ On cherche $LIC$ et $LSC$ tels que l'erreur de première espèce ne dépassant pas $10\%$.
+
+```{r}
+
+#On cherche ces quantiles
+qpois(0.1,8)
+qpois(0.1,8,lower.tail = FALSE)
+
+#Nous obtenons les probabilités exactes de ces points
+ppois(4, lambda = 8) #P[c<=4] < 0.1
+
+ppois(12, lambda = 8,lower.tail = FALSE) #P[c>12] < 0.1
+```
+Alors, $LIC = 4.5 \:$ et $\:LSC =18.5$. 
+
+Où $\: P[C < 4.5] = 0.099 < 0.1 \:$ et $\: P[C > 18.5] = 0.063 < 0.1$
+
+```{r,include=FALSE}
+c_carte1<-qic(defauts, 
+    #x     = sgr, 
+    data  = my_data4,
+    chart = 'c',
+    #title  = 'Average (Xbar chart)',
+    #ylab  = 'mesure',
+    #xlab  = 'Sous-groupe',
+    show.labels = TRUE)
+```
+
+
+```{r, include=FALSE}
+p4 <- c_carte1$data
+
+c_carte <- ggplot(p4,aes(x,y)) +
+  geom_ribbon(aes(ymin = 4.5,ymax = 18.5), fill = "blue",alpha = 0.1)+
+  geom_line(colour = "cyan3", size = .75) + 
+  geom_hline(yintercept=8,linetype=1,colour = "purple") + 
+  geom_hline(yintercept =4.5,linetype=5,colour = "purple") +
+  geom_hline(yintercept = 18.5,linetype=5,colour = "purple") +
+  geom_point(colour = "cyan3" , fill = "black", size = 1.5) +
+  scale_y_continuous(breaks = c(0,4.5,8,18.5,16.85)) + 
+  labs(x = "sous-groupes relationnels",y = "nombre de défauts") +
+  ggtitle(label = "Carte de contrôle c")
+#Si nous considérons en phase $I$  les limites sont lic = 9.847369, lsc = 10.15263
+```
+
+```{r}
+c_carte
+```
+
+Notons que 3 points sont en dehors des limites de contrôle, nous concluons donc qu'en recherchant une erreur de première espèce de moins de $10\%$ le processus est statistiquement hors de contrôle.
+
+## Exemple 5
+On considère ici un procédé industriel qui, sous contrôle, doit suivre une loi normale
+de type $N (50, 1)$. On aimerait savoir si le procédé est sous contrôle ou non en moyenne
+sachant qu’un déréglage lent est suspecté. Pour cela $50$ échantillons de $10$ observations ont été prélevés. Proposer une méthode d’étude pour ces observations et commenter les résultats obtenus.
+```{r, include=FALSE}
+col_names5= c('sgr','mesures')
+my_data5 <- read.table("//Users//mmjj//Documents//UPPA//MSID//Maitrise ststq procedes//Projet fichiers/exemple5.txt",
+                      header=FALSE,col.names = col_names5)
+
+
+my_data5<-qcc.groups(my_data5$mesures,my_data5$sgr)
+print(dim(my_data5))
+head(my_data5)
+```
+Comme on suspecte un désajustement lent, il est souhaitable de prendre en compte l'ensemble de l'historique du processus, on utilise donc la carte EMWA. Nous utilisons la pondération $w=0.1$.
+
+Les valeurs à représenter cont obtenues itérativement via la formule : 
+
+$\forall \: i = 1,2,\ldots50$ on a $Z_i= 0.1\bar{X}_i+0.9Z_{i-1}$ avec $Z_0=\mu_0 = 50$
+
+Les limites de contrôle sont donées par les fontions : 
+$t \longmapsto 10 \: \pm \: 3 \sqrt{\frac{1}{76}(1-0.9^{2t})}$
+
+
+```{r,include=FALSE}
+#ewma_carte <- ewma(my_data5,sizes = 10,center = 50,std.dev = 1, lambda=0.05, nsigmas=3,plot = TRUE)
+```
+
+
+```{r,include=TRUE}
+ewma_carte <- ewma(my_data5,sizes = 10,center = 50,std.dev = 1, lambda=0.1, nsigmas=3,plot = TRUE,title="EWMA Carte")
+```
+
+La carte nous montre les paramètres fixés : que le processus suit une loi normale $N (50, 1)$, que nous avons $50$ sous-groupes rationnels, que nous choisissons $w=0.1$ et que nous nous en tenons à la règle de $3\sigma$. Au total, il y a $8$ points qui sont hors de contrôle, donc nous concluons qu'il y a effectivement un problème, ce qui est détecté à partir de du sous-groupe rationnel 40.
+
+```{r,include=FALSE}
+#cumsum_carte <- cusum(my_data5,sizes = 10,center = 50,std.dev = 1, plot = TRUE,
+ #                     decision.interval =3)
+```
